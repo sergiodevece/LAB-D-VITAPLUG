@@ -204,7 +204,8 @@ TEST_CASE ("delay.tempo_change_smooth")
     for (size_t pos = 0; pos < warm.size(); pos += 512)
     {
         float* c[2] = { warm.L.data() + pos, warm.R.data() + pos };
-        e.process (c, 2, 512, hostAt (pos < 24000 ? 120.0 : 60.0));
+        const auto frames = std::min<size_t> (512, warm.size() - pos);
+        e.process (c, 2, (int) frames, hostAt (pos < 24000 ? 120.0 : 60.0));
     }
     auto imp = impulse (60000);
     for (size_t pos = 0; pos < imp.size(); pos += 512)

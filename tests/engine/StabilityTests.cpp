@@ -237,8 +237,9 @@ TEST_CASE ("stability.layout_changes")
     {
         float* ch[2] = { s.L.data() + pos, s.R.data() + pos };
         const int nch = (pos / 4096) % 2 ? 1 : 2;
-        e.process (ch, nch, 512, hostAt (120.0));
-        for (size_t i = pos; i < pos + 512; ++i)
+        const auto frames = std::min<size_t> (512, s.size() - pos);
+        e.process (ch, nch, (int) frames, hostAt (120.0));
+        for (size_t i = pos; i < pos + frames; ++i)
             finite = finite && std::isfinite (s.L[i]);
     }
     CHECK (finite);
@@ -262,7 +263,8 @@ TEST_CASE ("rt.no_allocation_in_process")
         p.timeMsL = 100.0 + (double) pos * 0.01;
         p.eq.band[5].highShelf = (pos / 4096) % 2;
         e.setParams (p);
-        e.process (ch, 2, 512, hostAt (120.0 + (double) pos * 1e-3));
+        const auto frames = std::min<size_t> (512, s.size() - pos);
+        e.process (ch, 2, (int) frames, hostAt (120.0 + (double) pos * 1e-3));
     }
     const long after = allocationCount.load();
     CHECK (after == before);
