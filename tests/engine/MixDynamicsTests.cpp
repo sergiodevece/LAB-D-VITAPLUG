@@ -118,6 +118,38 @@ TEST_CASE ("mix.drive_and_tape_character")
     CHECK (tapeH2 > -40.0);        // TAPE asimétrica: armónicos pares
 }
 
+TEST_CASE ("mix.drive_keeps_echo_level_at_minus_12")
+{
+    // La compensación fuera del bucle mantiene el nivel del eco a -12 dBFS
+    // (entrada de referencia) en todo el recorrido de DRIVE y en TAPE.
+    const double fs = 48000.0;
+    const size_t n = 48000;
+    const auto in = tone (n, 1000.0, fs, 0.25f);
+    double worst = 0.0;
+    for (bool tapeMode : { false, true })
+        for (float drv : { 0.0f, 0.25f, 0.5f, 0.75f, 1.0f })
+        {
+            auto p = cleanWetParams();
+            p.timeMsL = p.timeMsR = 10.0;
+            p.tape = tapeMode;
+            p.drive = drv;
+            const auto out = render (p, in);
+            const double lvl = db (toneAmplitude (out.L, n / 2, n, 1000.0, fs) / 0.25);
+            worst = std::max (worst, std::abs (lvl));
+            EVIDENCE ("%s DRIVE %3.0f %%: eco con entrada a -12 dBFS → %+.2f dB", tapeMode ? "TAPE " : "CLEAN", drv * 100.0f, lvl);
+        }
+    CHECK (worst < 0.25);
+    // A -30 dBFS la compensación se nota como un realce moderado (no amplifica el bucle).
+    auto p = cleanWetParams();
+    p.timeMsL = p.timeMsR = 10.0;
+    p.tape = true;
+    p.drive = 1.0f;
+    const auto quiet = render (p, tone (n, 1000.0, fs, 0.0316f));
+    const double boost = db (toneAmplitude (quiet.L, n / 2, n, 1000.0, fs) / 0.0316);
+    CHECK (boost < 7.0);
+    EVIDENCE ("TAPE DRIVE 100 a -30 dBFS: %+.2f dB (compensación máxima)", boost);
+}
+
 TEST_CASE ("mix.tape_evolves_on_recirculation")
 {
     // Con TAPE las repeticiones se oscurecen vuelta a vuelta (filtro en el bucle).

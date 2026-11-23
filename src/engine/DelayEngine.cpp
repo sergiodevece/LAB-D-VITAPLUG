@@ -67,6 +67,7 @@ void DelayEngine::prepare (double sampleRate, int /*maxBlockSize*/, int numChann
         r.prepare (fs, kTimeFadeSeconds);
     for (auto& c : colors)
         c.prepare (fs);
+    (void) LoopColor::makeupTables(); // tablas de compensación fuera del hilo de audio
     eq.prepare (fs, 2);
 
     feedbackS.prepare (fs, 0.020);
@@ -198,6 +199,7 @@ void DelayEngine::snapSmoothers() noexcept
         d.reset (d.getTarget());
     panBaseS.reset (panBaseS.getTarget());
     panNow = panBaseS.getTarget();
+    makeupNow = LoopColor::makeupGain (driveS.getTarget(), tapeS.getTarget());
     needsSnap = false;
 }
 
@@ -288,6 +290,7 @@ void DelayEngine::process (float* const* io, int numChannels, int n, const Trans
         // --- Bucle de retardo (por muestra) -----------------------------------
         float dryL[kSubBlock], dryR[kSubBlock], wetL[kSubBlock], wetR[kSubBlock];
         const float lpA = colors[0].lowPassCoefficient (driveS.getCurrent());
+        const float makeupPrev = makeupNow;
 
         for (int s = 0; s < len; ++s)
         {
@@ -346,6 +349,19 @@ void DelayEngine::process (float* const* io, int numChannels, int n, const Trans
             if (! (std::abs (wL) < 1.0e6f))
                 wL = 0.0f;
             lines[0].push (wL);
+        }
+
+        // --- Compensación de DRIVE/TAPE (fuera del bucle) ----------------------
+        makeupNow = LoopColor::makeupGain (driveS.getCurrent(), tapeS.getCurrent());
+        if (makeupPrev != 1.0f || makeupNow != 1.0f)
+        {
+            const float invL = 1.0f / (float) len;
+            for (int s = 0; s < len; ++s)
+            {
+                const float m = makeupPrev + (makeupNow - makeupPrev) * (float) (s + 1) * invL;
+                wetL[s] *= m;
+                wetR[s] *= m;
+            }
         }
 
         // --- ECHO EQ (solo wet, fuera del bucle) ------------------------------

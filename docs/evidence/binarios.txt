@@ -1,0 +1,28 @@
+== lipo ==
+Architectures in the fat file: build/release/LABD_artefacts/Release/AU/LAB-D.component/Contents/MacOS/LAB-D are: x86_64 arm64 
+Architectures in the fat file: build/release/LABD_artefacts/Release/VST3/LAB-D.vst3/Contents/MacOS/LAB-D are: x86_64 arm64 
+== vtool arm64 (AU) ==
+ platform MACOS
+    minos 11.0
+      sdk 26.5
+== vtool arm64 (VST3) ==
+ platform MACOS
+    minos 11.0
+      sdk 26.5
+== vtool x86_64 (AU) ==
+ platform MACOS
+    minos 10.15
+      sdk 26.5
+== vtool x86_64 (VST3) ==
+ platform MACOS
+    minos 10.15
+      sdk 26.5
+== codesign ==
+Identifier=com.vitaplug.labd
+CodeDirectory v=20400 size=16138 flags=0x2(adhoc) hashes=498+3 location=embedded
+Signature=adhoc
+TeamIdentifier=not set
+Identifier=com.vitaplug.labd
+CodeDirectory v=20400 size=16202 flags=0x2(adhoc) hashes=500+3 location=embedded
+Signature=adhoc
+TeamIdentifier=not set

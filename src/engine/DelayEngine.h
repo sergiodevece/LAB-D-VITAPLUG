@@ -156,6 +156,7 @@ private:
     // LFO
     float lfoSmoothed = 0.0f;
     float panNow = 0.0f;
+    float makeupNow = 1.0f; // compensación de DRIVE/TAPE del eco audible
 
     // Detectores de la señal seca
     float duckEnv = 0.0f, duckGain = 1.0f;

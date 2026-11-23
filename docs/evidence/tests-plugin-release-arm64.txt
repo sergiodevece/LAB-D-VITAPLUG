@@ -1,0 +1,88 @@
+LAB-D · pruebas integradas del plugin (JUCE JUCE v9.0.3)
+
+[ RUN  ] params.ids_unique_versioned_automatable
+    · 54 parámetros con ID estable (versión 1), todos automatizables
+[ PASS ] params.ids_unique_versioned_automatable
+[ RUN  ] params.readable_names_units_and_text_entry
+    · Time L '350 ms', Feedback '30 %', Output '0.0 dB', EQ 4 '1500 Hz', Rate '1/2'; texto '1.5k' → 1500 Hz
+[ PASS ] params.readable_names_units_and_text_entry
+[ RUN  ] params.init_values
+    · INIT: STEREO, CLEAN, 350/500 ms libres, FB 30 %, MIX 25 %, 1/8D y 1/4 memorizadas; EQ INIT vs EQ fuera: diferencia 0.00e+00
+[ PASS ] params.init_values
+[ RUN  ] state.roundtrip_all_values
+    · estado de 2113 bytes restaurado: 0 diferencias; banda 5, MIX 40 % con WET ONLY, TIME L 123 ms y 1/16T
+[ PASS ] state.roundtrip_all_values
+[ RUN  ] state.invalid_data_ignored
+[ PASS ] state.invalid_data_ignored
+[ RUN  ] state.wet_only_restores_mix
+    · WET ONLY: seco 0.000, eco 1.000; al salir MIX vuelve a 40 %: seco 0.600, eco 0.400
+[ PASS ] state.wet_only_restores_mix
+[ RUN  ] layout.supported_bus_layouts
+    · admitidas: 1→1, 2→2, 1→2; rechazadas: 2→1, 5.1, sin entrada
+[ PASS ] layout.supported_bus_layouts
+[ RUN  ] layout.mono_to_stereo_pingpong_alternates
+    · mono→estéreo PING PONG 1/8D-1/4 a 120 BPM: L en 18000 (375 ms), R en 42000 (875 ms), niveles 1.000 / 0.350
+[ PASS ] layout.mono_to_stereo_pingpong_alternates
+[ RUN  ] layout.mono_to_mono_uses_time_l
+    · mono→mono (PING PONG y PAN R pedidos): ecos a 100/200/300 ms con 1/0,5/0,25
+[ PASS ] layout.mono_to_mono_uses_time_l
+[ RUN  ] layout.config_changes_and_rates
+    · 44,1/48/96 kHz con bloques de 64 y 512, y reconfiguración a 1→2 al doble de frecuencia: salida finita
+[ PASS ] layout.config_changes_and_rates
+[ RUN  ] wrapper.host_tempo_and_reserve
+    · playhead 120 BPM: 1/8D → 18000, 1/4 → 24000; sin BPM → reserva 120 (18000)
+[ PASS ] wrapper.host_tempo_and_reserve
+[ RUN  ] wrapper.bypass_latency_tail
+    · bypass = parámetro del host; latencia 0; cola 3.50 s; BYPASS con OUTPUT +12 dB = seco exacto
+[ PASS ] wrapper.bypass_latency_tail
+[ RUN  ] wrapper.reset_from_other_thread
+    · reset() desde otro hilo: cola 0.500 antes, 0.000 tras el fundido en el siguiente bloque
+[ PASS ] wrapper.reset_from_other_thread
+[ RUN  ] wrapper.link_precedence_and_automation
+    · LINK con automatización de L y R a la vez: R efectivo = L (396.80 ms)
+[ PASS ] wrapper.link_precedence_and_automation
+[ RUN  ] wrapper.realtime_no_allocation
+    · 200 llamadas a processBlock sin reservas de memoria
+[ PASS ] wrapper.realtime_no_allocation
+[ RUN  ] wrapper.editor_open_close_does_not_affect_audio
+    · render con el editor abierto y cerrado a mitad: idéntico bit a bit al render sin editor
+[ PASS ] wrapper.editor_open_close_does_not_affect_audio
+[ RUN  ] editor.size_limits_and_aspect
+    · nominal 1320x600, mínimo 1100x500, máximo 2640x1200, proporción fija 2.20:1
+[ PASS ] editor.size_limits_and_aspect
+[ RUN  ] editor.text_fits_and_no_overlap
+    · tecla de 148 px: 'HIGH SHELF' a 19.5 px de letra (8.1 px a 1100x500)
+    · tecla de 148 px: 'HIGH CUT' a 20.0 px de letra (8.3 px a 1100x500)
+    · tecla de 148 px: 'LOW SHELF' a 20.0 px de letra (8.3 px a 1100x500)
+    · tecla de 148 px: 'LOW CUT' a 20.0 px de letra (8.3 px a 1100x500)
+    · tecla de 148 px: 'PING PONG' a 20.0 px de letra (8.3 px a 1100x500)
+    · tecla de 148 px: 'WET ONLY' a 20.0 px de letra (8.3 px a 1100x500)
+    · tecla de 148 px: 'BYPASS' a 20.0 px de letra (8.3 px a 1100x500)
+    · tecla de 148 px: 'MANUAL' a 20.0 px de letra (8.3 px a 1100x500)
+    · PING PONG    'PING PONG' ocupa 125 de 187 px de diseño (52 px a 1100x500)
+    · WET ONLY     'WET ONLY' ocupa 113 de 128 px de diseño (47 px a 1100x500)
+    · MANUAL       'MANUAL' ocupa 91 de 128 px de diseño (38 px a 1100x500)
+    · TIME         '4000 ms' ocupa 130 de 168 px de diseño (54 px a 1100x500)
+    · TIME figura  '1/32T' ocupa 93 de 168 px de diseño (39 px a 1100x500)
+    · TIME sub     'LINK 18000 ms' ocupa 121 de 168 px de diseño (50 px a 1100x500)
+    · OUTPUT       '−24.0 dB' ocupa 91 de 132 px de diseño (38 px a 1100x500)
+    · FREQ         '20.0 kHz' ocupa 91 de 132 px de diseño (38 px a 1100x500)
+    · RATE         '0.01 Hz' ocupa 80 de 132 px de diseño (33 px a 1100x500)
+    · RATE         '8 BAR' ocupa 57 de 132 px de diseño (24 px a 1100x500)
+    · DEPTH        '100%' ocupa 39 de 80 px de diseño (16 px a 1100x500)
+    · BPM          '400.0 BPM' ocupa 107 de 148 px de diseño (45 px a 1100x500)
+[ PASS ] editor.text_fits_and_no_overlap
+[ RUN  ] editor.time_knobs_follow_sync_and_link
+    · SYNC cambia los mandos a figuras sin perder los ms; con LINK el mando R edita L y R guarda 1/4
+[ PASS ] editor.time_knobs_follow_sync_and_link
+[ RUN  ] editor.eq_band_controls_and_undo
+    · banda 6: HIGH CUT ↔ HIGH SHELF recuerda GAIN -6.0 dB; LOW SHELF sin Q; undo devuelve GAIN a 9.0 dB
+[ PASS ] editor.eq_band_controls_and_undo
+[ RUN  ] editor.keyboard_and_double_click_are_host_gestures
+    · flecha arriba y doble clic en MIX: 2 gestos abiertos/2 cerrados; dos undo vuelven a 26 % y 25 %; la automatización no entra en el historial
+[ PASS ] editor.keyboard_and_double_click_are_host_gestures
+[ RUN  ] editor.wet_only_shows_effective_mix
+    · WET ONLY: mando MIX deshabilitado mostrando 100%; MIX guardado 32 %
+[ PASS ] editor.wet_only_shows_effective_mix
+
+22 casos, 22 PASS, 0 FAIL (filtro "")
