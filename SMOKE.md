@@ -16,6 +16,8 @@ INIT = cargar el plugin nuevo (sin preset).
   WET ONLY, CLEAN, EQ IN off, LFO off.
 - **Esperado**: primer eco en **L a 375 ms**, segundo en **R a 875 ms**, tercero en L a
   1250 ms (35 % del anterior cada vez). La pantalla muestra `1/8D · 375 ms` y `1/4 · 500 ms`.
+- Repite con el impulso **exactamente en el punto de reproducción** (arranque desde el
+  impulso): el primer eco debe estar entero, sin clic ni recorte.
 - Después: LFO ON, MANUAL, RATE SYNC `1/16T`, DEPTH PAN 20 % → los ecos tiemblan en el
   panorama a 12 Hz. Apaga SYNC de TIME (vuelven 350/500 ms) → **RATE sigue en `1/16T`**.
 - Resultado: ☐ OK ☐ Fallo — versión/revisión: ________ — notas/captura: ______________
@@ -43,18 +45,27 @@ INIT = cargar el plugin nuevo (sin preset).
   suavemente en los huecos; la cola no se acorta.
 - Automatiza TIME, GAIN de una banda y RATE con la cola sonando: sin clics ni vaciados.
 - En Apple Silicon: stop, ciclo y reapertura del proyecto con búfer de **64** y **512**
-  muestras. Stop/locate/ciclo no cortan la cola (salvo que el host emita un Reset); el
-  LFO sincronizado vuelve a su fase musical al arrancar.
+  muestras. Stop/locate/ciclo no cortan la cola salvo que el host emita un Reset (tras
+  una pausa el reinicio es completo; en mitad del audio la cola se funde en 10 ms sin
+  clic). El LFO sincronizado vuelve a su fase musical al arrancar.
+- Con FEEDBACK 85 % y TIME 1 s, deja que la cola siga sonando al acabar la región en una
+  pista que no esté en grabación: no debe cortarse antes de apagarse (cola comunicada al host).
 - Resultado: ☐ OK ☐ Fallo — versión/revisión: ________ — notas/captura: ______________
 
 ## 4 · Sesión y formatos
 
+- **Escaneo**: en Logic, Ajustes ▸ Plug-in Manager ▸ **VitaPlug ▸ LAB-D** = «successfully
+  validated» (no se pudo comprobar en la entrega: sin permiso de control de pantalla); en el
+  host VST3, que aparezca **VitaPlug LAB-D** en la lista de efectos.
 - **Logic (AU)** y **host VST3** con su binario: inserción en pista e inserción en
   auxiliar (WET ONLY), pista mono (mono→mono y mono→estéreo si el host lo ofrece).
 - Comprueba: automatización (lectura/escritura/touch), undo (⌘Z en el editor y undo del
   host), escala de ventana (mínimo 1100×500, nominal 1320×600), cerrar y abrir el editor
   durante la reproducción, guardar y reabrir la sesión, bounce/export (dos bounces
-  iguales con RND), bypass del host y BYPASS del plugin, varias instancias.
+  iguales con RND), varias instancias.
+- Bypass: activa y desactiva el **bypass del host** y el **BYPASS** del plugin con audio
+  sonando. Esperado en AU y VST3: transición sin clic; al salir del bypass el delay
+  arranca limpio (sin ecos de lo que sonó durante el bypass ni de la cola anterior).
 - Resultado AU: ☐ OK ☐ Fallo — versión/revisión: ________ — notas: ______________
 - Resultado VST3: ☐ OK ☐ Fallo — host: ________ — notas: ______________
 

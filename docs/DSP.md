@@ -66,12 +66,20 @@ las ganancias; el retardo, la realimentación, el color y la mezcla son por mues
   salto de posición (diferencia > 0,02 negras con la posición esperada: locate, vuelta
   del ciclo) la fase se alinea con la posición musical (`ppq / duración del ciclo`, más
   PHASE). Un cambio normal de BPM no la toca: la fase avanza de forma continua.
-- **Reinicio explícito del host** (`reset()` de JUCE: AU `Reset` —el wrapper de JUCE
-  también lo emite cuando el host activa `kAudioUnitProperty_BypassEffect`— o `prepareToPlay`): puede llegar desde cualquier
-  hilo, así que el wrapper solo marca la petición; el siguiente bloque de audio funde el
-  wet en 10 ms y vacía las líneas de forma lógica en O(1) (sin recorrer el búfer en el
-  hilo de audio), reinicia filtros, detectores y LFO. `prepareToPlay` reserva y vacía de
-  verdad. Un render offline arranca siempre desde el mismo estado (reproducible).
+- **Reinicio explícito del host** (`reset()` de JUCE: AU `Reset` —el wrapper de JUCE también
+  lo emite cuando el host activa `kAudioUnitProperty_BypassEffect`—, VST3 al dejar de
+  procesar, o `prepareToPlay`). Puede llegar desde cualquier hilo, así que el wrapper solo
+  lo marca y lo aplica **al principio del bloque siguiente, antes de grabar la entrada
+  nueva**: las líneas se vacían de forma lógica en O(1) (sin recorrer el búfer en el hilo de
+  audio) y la entrada nueva se graba entera desde su primera muestra.
+  - **Tras una pausa del host** (más de 10 ms o 4 bloques sin procesar: stop,
+    `setProcessing(false)`, inicio de un bounce) el reinicio es completo: la cola anterior
+    no vuelve a sonar y EQ, LFO y detectores parten de cero. Un render offline arranca
+    siempre desde el mismo estado (reproducible).
+  - **En mitad del audio** (por ejemplo, el bypass del AU) la cola anterior deja de
+    recircular y se funde en 10 ms a la salida, leída de las muestras anteriores al
+    reinicio (`readOld`), sin clic; EQ, LFO y detectores conservan su estado.
+  `prepareToPlay` reserva y vacía de verdad.
 
 ## FEEDBACK, color y DRIVE
 
@@ -122,7 +130,9 @@ DRIVE 100). Coste: ver `docs/PRUEBAS.md` (banco de CPU).
 
 ## DUCK
 
-Detector de pico con retención sobre la señal seca (máximo de |L| y |R|): ataque 2 ms,
+Detector de pico con retención sobre la señal seca (máximo de |L| y |R|; una muestra no
+finita cuenta como silencio, para que un Inf o NaN de entrada no deje el detector
+inutilizado): ataque 2 ms,
 retención 30 ms, liberación 60 ms. Zona de actuación de −45 dBFS (nada) a −30 dBFS
 (todo). La ganancia del wet baja hasta `−36 dB × DUCK` con ataque de 10 ms y se
 recupera con 100 ms. DUCK 0 es neutro bit a bit. Solo atenúa el wet de salida: la cola
@@ -134,7 +144,13 @@ hueco 0,6–1,4 s después, cola idéntica).
 MIX lineal `seco·(1−m) + wet·m`, con extremos exactos (MIX 0 devuelve la entrada bit a
 bit). WET ONLY fuerza m = 1 sin escribir en MIX; al salir se recupera el valor guardado
 (el mando muestra el valor efectivo, 100 %, y queda inactivo). OUTPUT −24…+12 dB después
-de MIX. Los parámetros se cuantifican al leerlos (0,001 ms y 0,001 dB) para que la
+de MIX.
+
+**BYPASS** (el del plugin y el del host, que es el mismo parámetro): la salida pasa al seco
+exacto con una rampa de 20 ms; con la misma rampa la entrada deja de grabarse en el bucle,
+y cuando el bypass es completo la cola se vacía (en silencio). Al salir, el delay arranca
+limpio: no suenan ecos de lo que entró durante el bypass ni la cola anterior. Así AU (donde
+JUCE emite además un `Reset` al activar el bypass) y VST3 se comportan igual. Los parámetros se cuantifican al leerlos (0,001 ms y 0,001 dB) para que la
 normalización del host no introduzca 99,9999 ms o 3·10⁻⁶ dB.
 
 ## ECHO EQ
@@ -174,7 +190,11 @@ el audio coinciden al milésimo de dB en los nueve casos medidos (tolerancia de 
 Ley de potencia constante que traslada un canal al otro: en el centro es la identidad
 (se conserva la imagen original); hacia R, `L' = L·cos θ`, `R' = R + L·sin θ` con
 `θ = |p|·π/2` (y simétrico hacia L). Un eco presente solo en L recorre el estéreo de
-extremo a extremo sin desaparecer.
+extremo a extremo sin desaparecer y conserva su potencia. Contrapartida asumida: un eco
+idéntico en L y R (fuente mono en STEREO con tiempos iguales) suma potencia al
+desplazarse, +2,3 dB en ±0,5 y +3,0 dB en el extremo, con el pico de un canal hasta +6 dB;
+con PAN del LFO al 100 % se oye como un ligero vaivén de nivel. Fijado por la prueba
+`mix.pan_law_correlated_echo`.
 
 ## Tiempo real
 

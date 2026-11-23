@@ -15,7 +15,7 @@ verificación. Al final, la revisión independiente con Superpowers.
 | A3 | AUTO devolvía la profundidad del LFO muy despacio en las colas (escala 0,23 a 1 s) | AUTO casi no modulaba en colas | `lfo.auto_mode_follower` | Liberación del seguidor 500 → 200 ms | escala 1,000 a 1 s de silencio |
 | A4 | Suavizado de aristas del LFO demasiado largo: la sierra perdía un 11 % de recorrido | Carácter de SAW atenuado | `lfo.square_saw_edges_smoothed`: −0,888 | 2 % del periodo, 1–5 ms | SAW −0,921…0,981, SQR ±1 |
 | A5 | La normalización del host no devuelve el valor exacto: 0 dB → 3·10⁻⁶ dB, 100 ms → 99,9999 ms | OUTPUT no era ganancia unitaria exacta; ecos a fracción de muestra en tiempos redondos | `params.init_values`, `layout.mono_to_mono_uses_time_l` | Cuantificación al leer (0,001 ms / 0,001 dB) y porcentajes divididos por 100 | ambas pruebas PASS; 100 ms = 4800 muestras exactas |
-| A6 | `reset()` puede llegar fuera del hilo de audio (AU `Reset`, también al activar el bypass del AU) y vaciar el búfer mientras se procesa: carrera de datos y corte brusco de la cola | Clic o fallo raro en el host | Lectura de `juce_audio_plugin_client_AU_1.mm` (Reset al activar bypass) | `reset()` solo marca; el bloque siguiente funde el wet 10 ms y vacía las líneas en O(1) | `wrapper.reset_from_other_thread`, `stability.soft_reset_fades_then_clears` |
+| A6 | `reset()` puede llegar fuera del hilo de audio (AU `Reset`, también al activar el bypass del AU) y vaciar el búfer mientras se procesa: carrera de datos y corte brusco de la cola | Clic o fallo raro en el host | Lectura de `juce_audio_plugin_client_AU_1.mm` (Reset al activar bypass) | `reset()` solo marca y el bloque siguiente lo aplica. La primera versión (fundir el wet y vaciar después) perdía audio nuevo: corregida en R1 | `wrapper.reset_from_other_thread`, `stability.host_reset_keeps_new_audio` |
 | A7 | «HIGH SHELF ↔» no cabía en la tecla de tipo (163 px en 148) y «400.0 BPM» no cabía en la lectura del pie | Texto cortado en el editor | `editor.text_fits_and_no_overlap` | Tecla con letra ajustada (mín. 17 px de diseño, sin la flecha); lectura del pie más ancha | PASS; «HIGH SHELF» a 19,5 px |
 | A8 | Los controles inactivos (TIME R y PING PONG en mono, MIX con WET ONLY, GAIN/Q no aplicables) no se atenuaban: `Graphics::setOpacity` solo afecta al color actual | Disposición mono y controles no aplicables no se distinguían | Captura `editor_mono_1320.png` | Capas de transparencia (`beginTransparencyLayer`) | captura revisada |
 | A9 | Con el `UndoManager` conectado al `AudioProcessorValueTreeState`, la automatización del host entraba en el historial y, con varios parámetros automatizados, la transacción abierta crecía sin límite | Memoria creciente en sesiones largas; undo deshacía automatización | Lectura de `juce_UndoManager.cpp` (coalescencia solo con la última acción) | `EditHistory`: solo gestos del plugin (begin/end), agrupados de pulsar a soltar | `editor.keyboard_and_double_click_are_host_gestures`, `editor.eq_band_controls_and_undo` |
@@ -54,6 +54,38 @@ para el eco de R a 500 ms.
 | Automatización, gestos, texto, teclado, undo, estado | Cumple | `params.*`, `state.*`, `editor.*`, pluginval |
 | Tiempo real y editor sin efecto en el audio | Cumple | `rt.*`, `wrapper.realtime_no_allocation`, `wrapper.editor_open_close_does_not_affect_audio` |
 
-## C. Revisión independiente (Superpowers)
+## C. Revisión independiente con Superpowers
 
-Pendiente de incorporar al terminar la revisión.
+Ejecutada con la skill `superpowers:requesting-code-review`: un revisor independiente
+(subagente de propósito general, sin el historial de esta sesión) recibió el encargo, el
+rango git completo (árbol vacío → `67a3fd4`) y la instrucción de revisar sin modificar el
+repositorio. Compiló el motor en una carpeta temporal (54/54 PASS), ejecutó las pruebas del
+plugin (22/22 PASS) y dos experimentos propios. Veredicto: **«With fixes»**. Cada hallazgo
+se comprobó en el código antes de corregirlo.
+
+| # | Gravedad | Hallazgo del revisor | Comprobación | Corrección | Regresión |
+|---|---|---|---|---|---|
+| R1 | Crítico | El reinicio «suave» fundía el wet 10 ms mientras seguía grabando la entrada nueva y después la borraba: el primer eco tras un reinicio perdía 10 ms y empezaba con un salto ~10x el natural; tras una pausa sonaban 10 ms de cola vieja | Confirmado (A6 introducía el defecto) | `hostReset()` al principio del bloque, antes de grabar: vaciado O(1); tras pausa, reinicio completo; en mitad del audio, la cola vieja se funde a la salida leyendo solo las muestras anteriores (`readOld`) y nunca vuelve al bucle | `stability.host_reset_keeps_new_audio` (bloques 64 y 512, con entrada durante y después), `wrapper.reset_after_pause_is_complete`, `wrapper.reset_from_other_thread` |
+| R2 | Importante | Un Inf/NaN de entrada dejaba DUCK y AUTO en NaN para siempre | Confirmado (el bucle sí estaba protegido) | Nivel del detector no finito = 0 | `stability.nonfinite_input_recovers` |
+| R3 | Importante | El bypass del host no era coherente: el bucle seguía grabando en bypass; AU vaciaba la cola (Reset de JUCE) y VST3 no | Confirmado | La entrada deja de grabarse con la rampa del bypass; con bypass completo la cola se vacía; al salir arranca limpio en ambos formatos | `mix.bypass_stops_recording_and_clears` |
+| R4 | Importante | La cola comunicada al host se calculaba tras cada bloque (2 s antes del primero) | Confirmado | `getTailLengthSeconds()` calcula con los parámetros actuales | `wrapper.tail_from_parameters_before_processing` |
+| R5 | Menor | La ley de PAN suma +3 dB con ecos correlados en el extremo | Confirmado, es la contrapartida de conservar los ecos de un solo canal | Documentado y fijado con prueba | `mix.pan_law_correlated_echo` |
+| R6 | Menor | Dos comprobaciones no podían fallar (`identical (...) \|\| true`; DUCK 0 comparado consigo mismo) | Confirmado | Comprobación real del estado restaurado; DUCK 0 = entrada retardada bit a bit con fuente fuerte | `state.roundtrip_all_values`, `dyn.duck_reduces_and_recovers` |
+| R7 | Menor | 10 lecturas repintaban a 30 Hz sin cambios (`setColour`) | Confirmado | Solo repinta si cambia | pruebas del editor |
+| R8 | Menor | Doble clic dentro de un gesto ya abierto: begin, begin, end, end al host | Confirmado | Se reutiliza el gesto abierto (mando, nodo del EQ, línea de PAN) | `editor.keyboard_and_double_click_are_host_gestures` |
+| R9 | Menor | La rueda abría un paso de undo por evento | Confirmado | Ediciones seguidas del mismo parámetro en 0,5 s = un paso | `editor.keyboard_and_double_click_are_host_gestures` |
+| R10 | Menor | Un mouseUp perdido podía bloquear el historial | Confirmado | Grupos sin anidamiento (uno por pulsación) | revisión del código |
+| R11 | Menor | La entrada de texto quitaba caracteres: «1/4» en ms → 14 ms; «1.2 s» → 1,2 ms | Confirmado | Número inicial + unidad (`s`, `ms`, `k`); texto no numérico se ignora en el editor y da el valor por defecto en el host | `params.readable_names_units_and_text_entry` |
+| R12 | Menor | Desbordamiento con signo en la huella del EQ | Confirmado | Aritmética sin signo | compila sin avisos |
+| R13 | Menor | `clearUndoHistory()` desde `setStateInformation`, que algunos hosts llaman fuera del hilo de mensajes | Confirmado | Petición atómica que se atiende en el hilo de mensajes | `state.*` |
+| R14 | Menor | Cambiar el enlace de un mando (SYNC, LINK, banda, SYNC de RATE) a mitad de un arrastre dejaba gestos desequilibrados | Confirmado | El cambio se aplica al soltar | revisión del código |
+| R15 | Menor | Documentos referenciados sin confirmar en git | Confirmado | Confirmados con esta entrega | — |
+
+Puntos que el revisor dejó fuera de juicio y que se aceptan como decisiones de diseño
+documentadas: fundido de ganancia igual (−3 dB a mitad con material no correlado, necesario
+para no superar ganancia 1 en el bucle); fundidos escalonados de 50 ms al automatizar TIME o
+BPM; ventana fija del detector de DUCK/AUTO; compensación de DRIVE calibrada a −12 dBFS; suma
+`(L+R)/2` hacia L en PING PONG; salto suavizado de fase del LFO al arrancar el transporte;
+historial de undo del plugin separado del del host; parámetros por bloque (no a la muestra).
+Tras las correcciones, la suite completa y la validación de formatos se repitieron sobre la
+candidata empaquetada (ver `docs/PRUEBAS.md`).
