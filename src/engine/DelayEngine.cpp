@@ -80,8 +80,35 @@ void DelayEngine::prepare (double sampleRate, int /*maxBlockSize*/, int numChann
     for (auto& d : depthS)
         d.prepare (fs, 0.050);
     panBaseS.prepare (fs, 0.030);
+    resetFadeS.prepare (fs, 0.010);
 
     reset();
+}
+
+void DelayEngine::beginSoftReset() noexcept
+{
+    if (softResetActive)
+        return;
+    softResetActive = true;
+    resetFadeS.setTarget (0.0f);
+}
+
+void DelayEngine::finishSoftReset() noexcept
+{
+    for (auto& l : lines)
+        l.forget();
+    for (auto& c : colors)
+        c.reset();
+    eq.reset();
+    lfo.reset (0.0);
+    lfoSmoothed = 0.0f;
+    duckEnv = autoEnv = 0.0f;
+    duckGain = autoScale = 1.0f;
+    duckHold = 0;
+    wasPlaying = false;
+    lfoSynced = false;
+    softResetActive = false;
+    resetFadeS.reset (1.0f);
 }
 
 void DelayEngine::reset()
@@ -99,6 +126,8 @@ void DelayEngine::reset()
     wasPlaying = false;
     lfoSynced = false;
     needsSnap = true;
+    softResetActive = false;
+    resetFadeS.reset (1.0f);
 }
 
 void DelayEngine::effectiveTimesMs (const EngineParams& p, double bpm, double& left, double& right) noexcept
@@ -345,8 +374,9 @@ void DelayEngine::process (float* const* io, int numChannels, int n, const Trans
             duckGain += (duckTarget < duckGain ? dGainA : dGainR) * (duckTarget - duckGain);
             if (std::abs (duckTarget - duckGain) < 1.0e-6f)
                 duckGain = duckTarget;
-            wl *= duckGain;
-            wr *= duckGain;
+            const float wetGain = softResetActive ? duckGain * resetFadeS.next() : duckGain;
+            wl *= wetGain;
+            wr *= wetGain;
 
             const float m = mixS.next();
             const float og = outputS.next();
@@ -369,6 +399,9 @@ void DelayEngine::process (float* const* io, int numChannels, int n, const Trans
                 outR[pos + s] = oR;
             }
         }
+
+        if (softResetActive && ! resetFadeS.isSmoothing() && resetFadeS.getCurrent() == 0.0f)
+            finishSoftReset();
     }
 
     // --- Telemetría ------------------------------------------------------------

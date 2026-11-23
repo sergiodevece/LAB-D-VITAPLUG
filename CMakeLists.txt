@@ -93,7 +93,6 @@ if(LABD_BUILD_PLUGIN)
         JUCE_WEB_BROWSER=0
         JUCE_USE_CURL=0
         JUCE_VST3_CAN_REPLACE_VST2=0
-        JUCE_DISPLAY_SPLASH_SCREEN=0
         LABD_VERSION_STRING="${PROJECT_VERSION}")
 
     juce_add_plugin(LABD
@@ -133,9 +132,9 @@ if(LABD_BUILD_PLUGIN)
 
     # Pruebas integradas del plugin (procesador y editor sin DAW).
     juce_add_console_app(labd_plugin_tests PRODUCT_NAME "labd_plugin_tests")
-    target_sources(labd_plugin_tests PRIVATE tests/plugin/PluginTests.cpp ${LABD_WRAPPER_SOURCES})
+    target_sources(labd_plugin_tests PRIVATE tests/plugin/PluginTests.cpp tests/engine/AllocationGuard.cpp ${LABD_WRAPPER_SOURCES})
     target_include_directories(labd_plugin_tests PRIVATE src tests)
-    target_compile_definitions(labd_plugin_tests PRIVATE ${LABD_JUCE_DEFINITIONS} JucePlugin_Name="LAB-D")
+    target_compile_definitions(labd_plugin_tests PRIVATE ${LABD_JUCE_DEFINITIONS} JucePlugin_Name="LAB-D" JUCE_MODAL_LOOPS_PERMITTED=1)
     target_link_libraries(labd_plugin_tests
         PRIVATE labd_engine labd_assets juce::juce_audio_processors juce::juce_audio_utils
         PUBLIC juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)

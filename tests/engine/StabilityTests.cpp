@@ -290,3 +290,39 @@ TEST_CASE ("rt.interpolator_gain_bounded")
     CHECK (worst <= 1.0 + 1e-9);
     EVIDENCE ("ganancia máxima de la interpolación Hermite en cualquier fracción y frecuencia: %.9f", worst);
 }
+
+TEST_CASE ("stability.soft_reset_fades_then_clears")
+{
+    // Reinicio del host durante la reproducción: el wet baja en 10 ms y la cola
+    // desaparece; la entrada nueva vuelve a generar ecos.
+    auto p = cleanWetParams();
+    p.feedback = 0.8f;
+    p.timeMsL = p.timeMsR = 50.0;
+    const double fs = 48000.0;
+    DelayEngine e;
+    e.prepare (fs, 64, 2);
+    e.setParams (p);
+    auto s = tone ((size_t) fs, 440.0, fs, 0.5f, 0, 24000);
+    std::vector<float> outL;
+    for (size_t pos = 0; pos < s.size(); pos += 64)
+    {
+        if (pos == 30016)
+            e.beginSoftReset();
+        float* ch[2] = { s.L.data() + pos, s.R.data() + pos };
+        e.process (ch, 2, 64, hostAt (120.0));
+    }
+    const float before = maxAbs (s.L, 28000, 30016);
+    const float during = maxStep (s.L, 30016, 30016 + 480);
+    const float after = maxAbs (s.L, 30016 + 520, s.size());
+    CHECK (before > 0.1f);
+    CHECK (after == 0.0f);
+    CHECK (during < (float) (2.0 * kPi * 440.0 / fs) * before * 1.2f);
+    CHECK (! e.isSoftResetPending());
+    // Ecos nuevos tras el reinicio.
+    auto imp = impulse (4800);
+    float* ch[2] = { imp.L.data(), imp.R.data() };
+    e.process (ch, 2, 4800, hostAt (120.0));
+    CHECK_NEAR (imp.L[2400], 1.0, 1e-6);
+    EVIDENCE ("reinicio suave: cola previa %.3f, mayor salto durante el fundido %.4f, después %.1f; eco nuevo %.3f",
+              before, during, after, imp.L[2400]);
+}

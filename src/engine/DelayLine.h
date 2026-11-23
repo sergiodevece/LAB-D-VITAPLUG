@@ -21,18 +21,26 @@ public:
         buffer.assign (size, 0.0f);
         mask = size - 1;
         writeIndex = 0;
+        valid = 0;
     }
 
     void clear() noexcept
     {
         std::fill (buffer.begin(), buffer.end(), 0.0f);
         writeIndex = 0;
+        valid = 0;
     }
+
+    // Vaciado lógico en O(1), apto para el hilo de audio: las muestras escritas
+    // antes de esta llamada se leen como silencio.
+    void forget() noexcept { valid = 0; }
 
     void push (float x) noexcept
     {
         buffer[writeIndex] = x;
         writeIndex = (writeIndex + 1) & mask;
+        if (valid < mask)
+            ++valid;
     }
 
     // Lectura antes de escribir la muestra actual: read(N) devuelve x[n - N]
@@ -56,10 +64,13 @@ public:
     size_t capacity() const noexcept { return buffer.size(); }
 
 private:
-    float at (size_t samplesAgo) const noexcept { return buffer[(writeIndex - samplesAgo) & mask]; }
+    float at (size_t samplesAgo) const noexcept
+    {
+        return samplesAgo <= valid ? buffer[(writeIndex - samplesAgo) & mask] : 0.0f;
+    }
 
     std::vector<float> buffer;
-    size_t mask = 0, writeIndex = 0;
+    size_t mask = 0, writeIndex = 0, valid = 0;
 };
 
 // Lector con transición: al cambiar el tiempo funde la lectura antigua con la

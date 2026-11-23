@@ -99,8 +99,13 @@ public:
 
     // Reserva todo lo necesario para el rango musical declarado (hasta 18 s).
     void prepare (double sampleRate, int maxBlockSize, int numChannels);
-    // Reinicio explícito: vacía líneas y estados (colas incluidas).
+    // Reinicio explícito: vacía líneas y estados (colas incluidas). Fuera del
+    // hilo de audio (prepare) o con el audio detenido.
     void reset();
+    // Reinicio explícito del host durante la reproducción (desde el hilo de
+    // audio): funde el wet en 10 ms y después vacía líneas y estados en O(1).
+    void beginSoftReset() noexcept;
+    bool isSoftResetPending() const noexcept { return softResetActive; }
 
     void setParams (const EngineParams& p) noexcept { params = p; }
     const EngineParams& getParams() const noexcept { return params; }
@@ -136,7 +141,9 @@ private:
 
     LinearSmoother feedbackS, driveS, tapeS, pingPongS, mixS, outputS, bypassS, lfoGateS;
     std::array<LinearSmoother, kNumLfoDepths> depthS;
-    LinearSmoother panBaseS;
+    LinearSmoother panBaseS, resetFadeS;
+    bool softResetActive = false;
+    void finishSoftReset() noexcept;
 
     // Tempo
     double lastBpm = tempo::kDefaultBpm;
