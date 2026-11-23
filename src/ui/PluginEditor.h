@@ -38,6 +38,7 @@ private:
     };
 
     void timerCallback() override;
+    void restoreEditorSize();
     void buildControls();
     void attachTimeKnobs (bool sync, bool link);
     void attachEqKnobs (int band, bool shelf6);
@@ -57,6 +58,7 @@ private:
     ui::LabdLookAndFeel lnf;
     juce::Image background;
     Panel panel { *this };
+    bool restoringEditorSize = true; // los límites iniciales ya pueden llamar a resized()
 
     // Izquierda
     ui::Knob timeL, timeR, feedbackKnob, mixKnob, outputKnob;

@@ -47,7 +47,8 @@ LabdEditor::LabdEditor (LabdProcessor& p)
     setResizeLimits (kMinWidth, kMinHeight, kDesignWidth, kDesignHeight);
     if (auto* c = getConstrainer())
         c->setFixedAspectRatio ((double) kDesignWidth / (double) kDesignHeight);
-    setSize (kNominalWidth, kNominalHeight);
+    restoreEditorSize();
+    restoringEditorSize = false;
 
     timerCallback();
     startTimerHz (30);
@@ -370,6 +371,8 @@ void LabdEditor::attachRateKnob (bool sync)
 
 void LabdEditor::timerCallback()
 {
+    // El host puede cargar el estado en otro hilo con el editor abierto.
+    restoreEditorSize();
     proc.getEditHistory().service();
     const auto& tl = proc.getTelemetry();
     const bool sync = raw (ids::timeSync) >= 0.5f;
@@ -528,10 +531,24 @@ void LabdEditor::paint (juce::Graphics& g)
     g.fillAll (juce::Colour (0xff1d2419));
 }
 
+void LabdEditor::restoreEditorSize()
+{
+    const auto width = proc.getEditorWidth();
+    const auto height = juce::roundToInt ((double) width * kDesignHeight / kDesignWidth);
+    if (getWidth() != width || (restoringEditorSize && getHeight() != height))
+    {
+        const juce::ScopedValueSetter<bool> restoring (restoringEditorSize, true);
+        setSize (width, height);
+    }
+}
+
 void LabdEditor::resized()
 {
-    const float scale = (float) getWidth() / (float) kDesignWidth;
+    const auto width = getWidth();
+    const float scale = (float) width / (float) kDesignWidth;
     panel.setTransform (juce::AffineTransform::scale (scale));
+    if (! restoringEditorSize && width >= kMinWidth && width <= kDesignWidth)
+        proc.setEditorWidth (width);
 }
 
 namespace {

@@ -292,6 +292,37 @@ TEST_CASE ("state.invalid_data_ignored")
     CHECK_NEAR (get (*p, ids::feedback), 55.0, 1e-4);
 }
 
+TEST_CASE ("state.editor_width_legacy_and_invalid_values")
+{
+    LabdProcessor p;
+    set (p, ids::feedback, 55.0f);
+    juce::MemoryBlock original;
+    p.getStateInformation (original);
+    auto xml = juce::AudioProcessor::getXmlFromBinary (original.getData(), (int) original.getSize());
+    CHECK (xml != nullptr);
+    if (xml == nullptr)
+        return;
+
+    const auto checkWidth = [&] (const char* value, int expected) {
+        p.setEditorWidth (1210);
+        if (value != nullptr)
+            xml->setAttribute ("ui_editor_width", value);
+        else
+            xml->removeAttribute ("ui_editor_width");
+        juce::MemoryBlock data;
+        juce::AudioProcessor::copyXmlToBinary (*xml, data);
+        p.setStateInformation (data.getData(), (int) data.getSize());
+        CHECK (p.getEditorWidth() == expected);
+        CHECK_NEAR (get (p, ids::feedback), 55.0, 1e-4);
+    };
+    checkWidth (nullptr, LabdEditor::kNominalWidth);
+    checkWidth ("0", LabdEditor::kNominalWidth);
+    checkWidth ("1210px", LabdEditor::kNominalWidth);
+    checkWidth ("9999999999999999", LabdEditor::kNominalWidth);
+    checkWidth ("800", LabdEditor::kMinWidth);
+    checkWidth ("4000", ui::kDesignWidth);
+}
+
 TEST_CASE ("state.wet_only_restores_mix")
 {
     auto p = makeProcessor();
@@ -599,6 +630,57 @@ TEST_CASE ("editor.size_limits_and_aspect")
     EVIDENCE ("nominal 1320x600, mínimo 1100x500, máximo 2640x1200, proporción fija %.2f:1", c->getFixedAspectRatio());
 }
 
+TEST_CASE ("editor.size_persists_per_instance")
+{
+    struct HostListener final : juce::AudioProcessorListener
+    {
+        void audioProcessorParameterChanged (juce::AudioProcessor*, int, float) override {}
+        void audioProcessorChanged (juce::AudioProcessor*, const ChangeDetails& details) override
+        {
+            if (details.nonParameterStateChanged)
+                ++stateChanges;
+        }
+        int stateChanges = 0;
+    };
+
+    HostListener listener;
+    LabdProcessor first, second;
+    first.addListener (&listener);
+    std::unique_ptr<juce::AudioProcessorEditor> editor (first.createEditor());
+    CHECK (editor->getWidth() == 1320 && editor->getHeight() == 600);
+    CHECK (listener.stateChanges == 0);
+    editor->setSize (1210, 550);
+    CHECK (listener.stateChanges == 1);
+
+    juce::MemoryBlock saved;
+    first.getStateInformation (saved);
+    editor.reset();
+    editor.reset (first.createEditor());
+    CHECK (editor->getWidth() == 1210 && editor->getHeight() == 550);
+    CHECK (listener.stateChanges == 1);
+    first.removeListener (&listener);
+
+    std::unique_ptr<LabdEditor> other (dynamic_cast<LabdEditor*> (second.createEditor()));
+    CHECK (other->getWidth() == 1320 && other->getHeight() == 600);
+    other->setSize (1100, 500);
+    CHECK (editor->getWidth() == 1210 && first.getEditorWidth() == 1210);
+
+    juce::MemoryBlock otherState;
+    second.getStateInformation (otherState);
+    LabdProcessor reopened;
+    reopened.setStateInformation (saved.getData(), (int) saved.getSize());
+    std::unique_ptr<juce::AudioProcessorEditor> restored (reopened.createEditor());
+    CHECK (restored->getWidth() == 1210 && restored->getHeight() == 550);
+
+    // Aplicar estado con el editor abierto también actualiza la ventana.
+    second.setStateInformation (saved.getData(), (int) saved.getSize());
+    other->refreshNow();
+    CHECK (other->getWidth() == 1210 && other->getHeight() == 550);
+    second.setStateInformation (otherState.getData(), (int) otherState.getSize());
+    other->refreshNow();
+    CHECK (other->getWidth() == 1100 && other->getHeight() == 500);
+}
+
 TEST_CASE ("editor.text_fits_and_no_overlap")
 {
     auto p = makeProcessor();
@@ -710,11 +792,13 @@ TEST_CASE ("editor.eq_band_controls_and_undo")
     }
     CHECK_NEAR (get (*p, "eq2_gain"), 9.0, 0.01);
     CHECK (undo.canUndo());
+    e->setSize (1210, 550);
     CHECK (undo.undo());
     CHECK_NEAR (get (*p, "eq2_gain"), 0.0, 0.01);
     CHECK_NEAR (get (*p, "eq6_gain"), -6.0, 1e-4); // el undo solo deshace su gesto
     CHECK (undo.redo());
     CHECK_NEAR (get (*p, "eq2_gain"), 9.0, 0.01);
+    CHECK (e->getWidth() == 1210 && e->getHeight() == 550);
     EVIDENCE ("banda 6: HIGH CUT ↔ HIGH SHELF recuerda GAIN %.1f dB; LOW SHELF sin Q; undo devuelve GAIN a %.1f dB",
               get (*p, "eq6_gain"), get (*p, "eq2_gain"));
 }

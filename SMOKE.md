@@ -63,6 +63,10 @@ INIT = cargar el plugin nuevo (sin preset).
   host), escala de ventana (mínimo 1100×500, nominal 1320×600), cerrar y abrir el editor
   durante la reproducción, guardar y reabrir la sesión, bounce/export (dos bounces
   iguales con RND), varias instancias.
+- Tamaño del editor: reduce una instancia, ciérrala y ábrela. Después guarda el proyecto
+  habiendo cambiado solo el tamaño, ciérralo y vuelve a abrirlo. La instancia debe recuperar
+  su tamaño en ambas pruebas. Repite con una segunda instancia a otro tamaño. Una instancia
+  nueva o un proyecto antiguo sin tamaño guardado abre a 1320×600.
 - Bypass: activa y desactiva el **bypass del host** y el **BYPASS** del plugin con audio
   sonando. Esperado en AU y VST3: transición sin clic; al salir del bypass el delay
   arranca limpio (sin ecos de lo que sonó durante el bypass ni de la cola anterior).

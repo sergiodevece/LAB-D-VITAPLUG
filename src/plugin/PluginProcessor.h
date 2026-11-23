@@ -69,9 +69,11 @@ public:
     const UiTelemetry& getTelemetry() const noexcept { return telemetry; }
     const DelayEngine& getEngine() const noexcept { return engine; }
 
-    // Estado del editor guardado con la sesión (banda seleccionada).
+    // Estado del editor guardado con la sesión.
     int getSelectedBand() const;
     void setSelectedBand (int band);
+    int getEditorWidth() const noexcept { return editorWidth.load (std::memory_order_relaxed); }
+    void setEditorWidth (int width); // llamado desde el hilo de interfaz
 
     static constexpr int kStateVersion = 1;
 
@@ -93,6 +95,7 @@ private:
     // audio de uno tras una pausa del host.
     double lastBlockEndMs = 0.0, lastBlockDurationMs = 0.0;
     std::atomic<int> selectedBand { 2 }; // estado del editor; se guarda con la sesión
+    std::atomic<int> editorWidth;
     double currentSampleRate = 48000.0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (LabdProcessor)

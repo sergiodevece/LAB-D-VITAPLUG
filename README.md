@@ -156,5 +156,7 @@ En Logic: Ajustes ▸ Plug-in Manager ▸ «VitaPlug LAB-D» debe figurar como v
 - LFO: arrastrar sobre la línea L–R de la pantalla fija el PAN base del eco (doble clic: centro).
 - ⌘Z / ⇧⌘Z deshacen y rehacen ediciones hechas en el editor (la automatización del host no
   entra en este historial).
+- Cada instancia recuerda el tamaño del editor al volver a abrirlo y cuando el host
+  restaura el proyecto guardado. Una instancia nueva abre a 1320×600.
 - Pie: LED HOST cuando el BPM llega del host; INT cuando se usa el último BPM válido o la
   reserva de 120.

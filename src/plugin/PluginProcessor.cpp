@@ -2,11 +2,31 @@
 
 #include "ui/PluginEditor.h"
 
+#include <charconv>
+
 namespace labd {
 
 namespace {
 const juce::Identifier kStateVersionId ("labd_state_version");
 const juce::Identifier kSelectedBandId ("ui_selected_band");
+const juce::Identifier kEditorWidthId ("ui_editor_width");
+
+int limitEditorWidth (int width) noexcept
+{
+    return juce::jlimit (LabdEditor::kMinWidth, ui::kDesignWidth, width);
+}
+
+int editorWidthFromState (const juce::var& value)
+{
+    // El XML de JUCE puede devolver el valor como texto. Exige un entero positivo completo.
+    const auto text = value.toString().trim();
+    const auto* begin = text.toRawUTF8();
+    const auto* end = begin + text.getNumBytesAsUTF8();
+    int width = 0;
+    const auto result = std::from_chars (begin, end, width);
+    return result.ec == std::errc{} && result.ptr == end && width > 0
+               ? limitEditorWidth (width) : LabdEditor::kNominalWidth;
+}
 } // namespace
 
 LabdProcessor::LabdProcessor()
@@ -14,7 +34,8 @@ LabdProcessor::LabdProcessor()
                           .withInput ("Input", juce::AudioChannelSet::stereo(), true)
                           .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
       apvts (*this, nullptr, "LABD", createParameterLayout()),
-      refs (apvts)
+      refs (apvts),
+      editorWidth (LabdEditor::kNominalWidth)
 {
     apvts.state.setProperty (kStateVersionId, kStateVersion, nullptr);
 }
@@ -190,11 +211,19 @@ void LabdProcessor::setSelectedBand (int band)
     selectedBand.store (juce::jlimit (0, kNumEqBands - 1, band));
 }
 
+void LabdProcessor::setEditorWidth (int width)
+{
+    width = limitEditorWidth (width);
+    if (editorWidth.exchange (width, std::memory_order_relaxed) != width)
+        updateHostDisplay (juce::AudioProcessorListener::ChangeDetails{}.withNonParameterStateChanged (true));
+}
+
 void LabdProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
     auto state = apvts.copyState();
     state.setProperty (kStateVersionId, kStateVersion, nullptr);
     state.setProperty (kSelectedBandId, selectedBand.load(), nullptr);
+    state.setProperty (kEditorWidthId, getEditorWidth(), nullptr);
     if (auto xml = state.createXml())
         copyXmlToBinary (*xml, destData);
 }
@@ -207,7 +236,10 @@ void LabdProcessor::setStateInformation (const void* data, int sizeInBytes)
         {
             auto tree = juce::ValueTree::fromXml (*xml);
             setSelectedBand ((int) tree.getProperty (kSelectedBandId, 2));
+            const auto width = editorWidthFromState (tree.getProperty (kEditorWidthId));
+            tree.removeProperty (kEditorWidthId, nullptr);
             apvts.replaceState (tree);
+            editorWidth.store (width, std::memory_order_relaxed);
             editHistory.requestClear(); // el UndoManager solo se toca en el hilo de mensajes
         }
     }

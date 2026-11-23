@@ -76,6 +76,11 @@ if(LABD_BUILD_PLUGIN)
     endif()
     add_subdirectory("${LABD_JUCE_DIR}" "${CMAKE_BINARY_DIR}/JUCE")
 
+    if(APPLE)
+        include(cmake/ForwardAuStateChanges.cmake)
+        labd_forward_au_state_changes()
+    endif()
+
     juce_add_binary_data(labd_assets
         HEADER_NAME LabdAssets.h
         NAMESPACE LabdAssets
