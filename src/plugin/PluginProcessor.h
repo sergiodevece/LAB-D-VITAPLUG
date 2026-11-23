@@ -2,6 +2,7 @@
 #pragma once
 
 #include "engine/DelayEngine.h"
+#include "plugin/EditHistory.h"
 #include "plugin/Parameters.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -64,6 +65,7 @@ public:
 
     juce::AudioProcessorValueTreeState& getState() noexcept { return apvts; }
     juce::UndoManager& getUndoManager() noexcept { return undoManager; }
+    EditHistory& getEditHistory() noexcept { return editHistory; }
     const UiTelemetry& getTelemetry() const noexcept { return telemetry; }
     const DelayEngine& getEngine() const noexcept { return engine; }
 
@@ -82,6 +84,7 @@ private:
     ParameterRefs refs;
     DelayEngine engine;
     UiTelemetry telemetry;
+    EditHistory editHistory { *this, undoManager }; // undo solo de gestos del editor
     std::atomic<bool> resetRequested { false };
     std::atomic<float> tailSeconds { 2.0f };
     double currentSampleRate = 48000.0;

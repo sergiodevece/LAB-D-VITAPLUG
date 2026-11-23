@@ -36,7 +36,15 @@ void LfoDisplay::refresh()
         rateLabel = tempo::kRates[juce::jlimit (0, tempo::kNumRates - 1, juce::roundToInt (v (ids::lfoRateNote)))].label;
     else
         rateLabel = format::hz (v (ids::lfoRate));
-    repaint();
+
+    // Repinta mientras el LFO se mueve o cuando cambia algo visible.
+    const auto key = rateLabel + "|" + juce::String ((int) shape) + (on ? "1" : "0") + (autoMode ? "1" : "0") + (mono ? "1" : "0")
+                     + juce::String (basePan, 3) + juce::String (effPan, 3) + juce::String (phaseOffset, 3);
+    if (on || gate > 0.0f || key != lastKey)
+    {
+        lastKey = key;
+        repaint();
+    }
 }
 
 float LfoDisplay::panX (float pan) const noexcept
@@ -150,7 +158,6 @@ void LfoDisplay::mouseDown (const juce::MouseEvent& e)
     draggingPan = ! mono && std::abs (e.position.y - kPanY) < 22.0f && e.position.x > kPanLeft - 30.0f && e.position.x < kPanRight + 30.0f;
     if (! draggingPan)
         return;
-    proc.getUndoManager().beginNewTransaction();
     if (auto* p = proc.getState().getParameter (ids::pan))
         p->beginChangeGesture();
     setPanFromX (e.position.x);
@@ -175,7 +182,6 @@ void LfoDisplay::mouseDoubleClick (const juce::MouseEvent& e)
 {
     if (mono || std::abs (e.position.y - kPanY) > 22.0f)
         return;
-    proc.getUndoManager().beginNewTransaction();
     if (auto* p = proc.getState().getParameter (ids::pan))
     {
         p->beginChangeGesture();

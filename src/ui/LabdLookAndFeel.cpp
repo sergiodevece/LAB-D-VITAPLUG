@@ -211,17 +211,15 @@ Knob::Knob() : juce::Slider (juce::Slider::RotaryVerticalDrag, juce::Slider::NoT
 void Knob::mouseDown (const juce::MouseEvent& e)
 {
     setMouseDragSensitivity (e.mods.isShiftDown() ? 1200 : 300); // Mayúsculas: ajuste fino
-    if (onGestureStart)
-        onGestureStart();
     juce::Slider::mouseDown (e);
 }
 
-void Knob::mouseDoubleClick (const juce::MouseEvent&)
+void Knob::resetToDefault()
 {
     if (! isEnabled())
         return;
-    if (onGestureStart)
-        onGestureStart();
+    // Gesto completo para el host (touch/latch) y el historial de undo.
+    const ScopedDragNotification gesture (*this);
     setValue (defaultValue, juce::sendNotificationSync);
 }
 
@@ -242,16 +240,14 @@ bool Knob::keyPressed (const juce::KeyPress& key)
         step = -0.05;
     else if (code == juce::KeyPress::homeKey || code == juce::KeyPress::endKey)
     {
-        if (onGestureStart)
-            onGestureStart();
+        const ScopedDragNotification gesture (*this);
         setValue (code == juce::KeyPress::homeKey ? getMinimum() : getMaximum(), juce::sendNotificationSync);
         return true;
     }
     else
         return false;
 
-    if (onGestureStart)
-        onGestureStart();
+    const ScopedDragNotification gesture (*this);
     const double interval = getInterval();
     double target = proportionOfLengthToValue (juce::jlimit (0.0, 1.0, valueToProportionOfLength (getValue()) + step));
     if (interval > 0.0 && std::abs (target - getValue()) < interval)

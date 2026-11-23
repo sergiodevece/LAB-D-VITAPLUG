@@ -13,7 +13,7 @@ LabdProcessor::LabdProcessor()
     : AudioProcessor (BusesProperties()
                           .withInput ("Input", juce::AudioChannelSet::stereo(), true)
                           .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
-      apvts (*this, &undoManager, "LABD", createParameterLayout()),
+      apvts (*this, nullptr, "LABD", createParameterLayout()),
       refs (apvts)
 {
     apvts.state.setProperty (kStateVersionId, kStateVersion, nullptr);

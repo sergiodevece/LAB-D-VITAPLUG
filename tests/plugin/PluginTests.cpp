@@ -654,25 +654,64 @@ TEST_CASE ("editor.eq_band_controls_and_undo")
     CHECK (type->getButtonText().startsWith ("HIGH SHELF"));
     CHECK (gain->isEnabled() && ! q->isEnabled());
     CHECK_NEAR (get (*p, "eq6_gain"), -6.0, 1e-4); // la ganancia se recuerda al cambiar de tipo
-    juce::MessageManager::getInstance()->runDispatchLoopUntil (200); // vuelca los cambios al historial
     // Banda 2 (LOW SHELF): sin Q.
     p->setSelectedBand (1);
     e->refreshNow();
     CHECK (! q->isEnabled() && gain->isEnabled());
-    // Undo de un gesto del editor.
+    // Undo de un gesto del editor (los cambios sin gesto, como la automatización, no entran).
     auto& undo = p->getUndoManager();
-    undo.beginNewTransaction();
-    gain->setValue (9.0, juce::sendNotificationSync);
+    const int before = undo.getNumActionsInCurrentTransaction();
+    juce::ignoreUnused (before);
+    {
+        const juce::Slider::ScopedDragNotification gesture (*gain); // como un arrastre real
+        gain->setValue (9.0, juce::sendNotificationSync);
+    }
     CHECK_NEAR (get (*p, "eq2_gain"), 9.0, 0.01);
-    // El árbol de estado (y su historial de undo) se sincroniza en el hilo de mensajes.
-    juce::MessageManager::getInstance()->runDispatchLoopUntil (200);
-    undo.beginNewTransaction();
+    CHECK (undo.canUndo());
     CHECK (undo.undo());
-    juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
     CHECK_NEAR (get (*p, "eq2_gain"), 0.0, 0.01);
     CHECK_NEAR (get (*p, "eq6_gain"), -6.0, 1e-4); // el undo solo deshace su gesto
+    CHECK (undo.redo());
+    CHECK_NEAR (get (*p, "eq2_gain"), 9.0, 0.01);
     EVIDENCE ("banda 6: HIGH CUT ↔ HIGH SHELF recuerda GAIN %.1f dB; LOW SHELF sin Q; undo devuelve GAIN a %.1f dB",
               get (*p, "eq6_gain"), get (*p, "eq2_gain"));
+}
+
+TEST_CASE ("editor.keyboard_and_double_click_are_host_gestures")
+{
+    // Las ediciones por teclado y el doble clic del mando abren un gesto: el host
+    // las registra en touch/latch y entran en el historial de undo; la
+    // automatización (cambios sin gesto) no entra.
+    struct GestureCounter final : juce::AudioProcessorParameter::Listener
+    {
+        int begins = 0, ends = 0;
+        void parameterValueChanged (int, float) override {}
+        void parameterGestureChanged (int, bool starting) override { (starting ? begins : ends)++; }
+    };
+    auto p = makeProcessor();
+    std::unique_ptr<LabdEditor> e (dynamic_cast<LabdEditor*> (p->createEditor()));
+    auto* mix = dynamic_cast<ui::Knob*> (e->findById ("mix"));
+    CHECK (mix != nullptr);
+    GestureCounter counter;
+    auto* param = p->getState().getParameter (ids::mix);
+    param->addListener (&counter);
+    mix->keyPressed (juce::KeyPress (juce::KeyPress::upKey));
+    CHECK (counter.begins == 1 && counter.ends == 1);
+    CHECK_NEAR (get (*p, ids::mix), 26.0, 0.05);
+    mix->resetToDefault(); // lo que ejecuta el doble clic
+    CHECK (counter.begins == 2 && counter.ends == 2);
+    CHECK_NEAR (get (*p, ids::mix), 25.0, 0.05);
+    param->removeListener (&counter);
+    auto& undo = p->getUndoManager();
+    CHECK (undo.undo());
+    CHECK_NEAR (get (*p, ids::mix), 26.0, 0.05);
+    CHECK (undo.undo());
+    CHECK_NEAR (get (*p, ids::mix), 25.0, 0.05);
+    // La automatización del host (sin gesto) no se registra.
+    set (*p, ids::mix, 70.0f);
+    CHECK (! undo.canUndo());
+    EVIDENCE ("flecha arriba y doble clic en MIX: %d gestos abiertos/%d cerrados; dos undo vuelven a 26 %% y 25 %%; la automatización no entra en el historial",
+              counter.begins, counter.ends);
 }
 
 TEST_CASE ("editor.wet_only_shows_effective_mix")

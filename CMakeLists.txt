@@ -83,6 +83,7 @@ if(LABD_BUILD_PLUGIN)
 
     set(LABD_WRAPPER_SOURCES
         src/plugin/Parameters.cpp
+        src/plugin/EditHistory.cpp
         src/plugin/PluginProcessor.cpp
         src/ui/LabdLookAndFeel.cpp
         src/ui/EqDisplay.cpp

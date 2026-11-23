@@ -22,6 +22,7 @@ public:
     void resized() override;
     bool keyPressed (const juce::KeyPress&) override;
     void mouseDown (const juce::MouseEvent&) override;
+    void mouseUp (const juce::MouseEvent&) override;
 
     // Para pruebas y capturas: refresco inmediato y acceso a componentes.
     void refreshNow() { timerCallback(); }

@@ -72,7 +72,26 @@ void EqDisplay::refresh()
             modulating = true;
     }
     selected = proc.getSelectedBand();
-    repaint();
+
+    // Coeficientes de la curva: las mismas funciones de diseño que el motor.
+    for (int b = 0; b < kNumEqBands; ++b)
+    {
+        const auto& bv = bands[(size_t) b];
+        baseCoeffs[(size_t) b] = designSvf (bv.type, bv.freq, bv.gain, bv.q, sampleRate);
+        modCoeffs[(size_t) b] = designSvf (bv.type, bv.effectiveFreq, bv.gain, bv.q, sampleRate);
+    }
+
+    // Repinta solo si algo cambió (o mientras el LFO modula).
+    juce::int64 h = (juce::int64) selected * 31 + (eqOn ? 7 : 0) + (bypassed ? 13 : 0) + (juce::int64) sampleRate;
+    for (const auto& bv : bands)
+        h = h * 1000003 + (juce::int64) std::llround (bv.freq * 100.0) * 7 + (juce::int64) std::llround (bv.gain * 1000.0) * 11
+            + (juce::int64) std::llround (bv.q * 1000.0) * 13 + (bv.on ? 17 : 0) + (juce::int64) bv.type * 19
+            + (juce::int64) std::llround (bv.depth * 1000.0f) * 23;
+    if (modulating || h != lastHash)
+    {
+        lastHash = h;
+        repaint();
+    }
 }
 
 double EqDisplay::responseDbAt (double hz, bool modulated) const
@@ -80,13 +99,9 @@ double EqDisplay::responseDbAt (double hz, bool modulated) const
     if (! eqOn)
         return 0.0;
     std::complex<double> h = 1.0;
-    for (const auto& b : bands)
-    {
-        if (! b.on)
-            continue;
-        const double f = modulated ? b.effectiveFreq : b.freq;
-        h *= svfResponse (designSvf (b.type, f, b.gain, b.q, sampleRate), hz, sampleRate);
-    }
+    for (int b = 0; b < kNumEqBands; ++b)
+        if (bands[(size_t) b].on)
+            h *= svfResponse (modulated ? modCoeffs[(size_t) b] : baseCoeffs[(size_t) b], hz, sampleRate);
     return 20.0 * std::log10 (std::max (std::abs (h), 1.0e-9));
 }
 
@@ -234,7 +249,6 @@ void EqDisplay::mouseDown (const juce::MouseEvent& e)
         return;
     if (onBandSelected)
         onBandSelected (dragging);
-    proc.getUndoManager().beginNewTransaction();
     if (auto* p = proc.getState().getParameter (ids::eqFreqId (dragging)))
         p->beginChangeGesture();
     if (! isCut (bands[(size_t) dragging].type))
@@ -270,7 +284,6 @@ void EqDisplay::mouseDoubleClick (const juce::MouseEvent& e)
     for (int b = 0; b < kNumEqBands; ++b)
         if (nodePosition (b).getDistanceFrom (e.position) < 30.0f && ids::bandHasGain (b) && ! isCut (bands[(size_t) b].type))
         {
-            proc.getUndoManager().beginNewTransaction();
             if (auto* p = proc.getState().getParameter (ids::eqGainId (b)))
             {
                 p->beginChangeGesture();

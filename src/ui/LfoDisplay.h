@@ -29,6 +29,7 @@ private:
     bool on = false, autoMode = false, mono = false, draggingPan = false;
     float phase = 0.0f, value = 0.0f, gate = 0.0f, autoScale = 1.0f, effPan = 0.0f, basePan = 0.0f, phaseOffset = 0.0f;
     juce::String rateLabel;
+    juce::String lastKey;
 };
 
 } // namespace labd::ui

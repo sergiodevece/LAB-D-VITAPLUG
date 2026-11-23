@@ -56,6 +56,7 @@ LabdEditor::LabdEditor (LabdProcessor& p)
 LabdEditor::~LabdEditor()
 {
     stopTimer();
+    proc.getEditHistory().closeAllGroups();
     panel.removeMouseListener (this);
     setLookAndFeel (nullptr);
 }
@@ -82,7 +83,6 @@ void LabdEditor::bindTextEntry (ValueDisplay& display, std::function<juce::Strin
     display.onTextEntered = [this, paramId] (const juce::String& text) {
         if (auto* p = state.getParameter (paramId()))
         {
-            proc.getUndoManager().beginNewTransaction();
             auto t = text.trim();
             float v = p->getValueForText (t);
             if (auto* choice = dynamic_cast<juce::AudioParameterChoice*> (p))
@@ -106,11 +106,9 @@ void LabdEditor::bindTextEntry (ValueDisplay& display, std::function<juce::Strin
 
 void LabdEditor::buildControls()
 {
-    auto& undo = proc.getUndoManager();
     auto addKnob = [&] (Knob& k, juce::Rectangle<int> b) {
         panel.addAndMakeVisible (k);
         k.setBounds (b);
-        k.onGestureStart = [&undo] { undo.beginNewTransaction(); };
     };
     auto addDisplay = [&] (ValueDisplay& d, juce::Rectangle<int> b) {
         panel.addAndMakeVisible (d);
@@ -167,10 +165,7 @@ void LabdEditor::buildControls()
     driveAtt = std::make_unique<SliderAttachment> (state, ids::drive, driveSlider);
     duckAtt = std::make_unique<SliderAttachment> (state, ids::duck, duckSlider);
     for (auto* s : { &driveSlider, &duckSlider })
-    {
         s->setDoubleClickReturnValue (true, 0.0);
-        s->onDragStart = [&undo] { undo.beginNewTransaction(); };
-    }
     addDisplay (driveValue, { 340, 1006, 76, 30 });
     addDisplay (duckValue, { 672, 1006, 76, 30 });
     bindTextEntry (driveValue, [] { return juce::String (ids::drive); });
@@ -242,7 +237,6 @@ void LabdEditor::buildControls()
         f->setBounds (kFaderX[i] - 17, 942, 34, 105);
         depthAtts[(size_t) i] = std::make_unique<SliderAttachment> (state, ids::lfoDepthId (i), *f);
         f->setDoubleClickReturnValue (true, 0.0);
-        f->onDragStart = [&undo] { undo.beginNewTransaction(); };
         auto& v = depthValues[(size_t) i];
         v = std::make_unique<ValueDisplay> (ValueDisplay::Style::Plain);
         addDisplay (*v, { kFaderX[i] - 40, 916, 80, 28 });
@@ -409,9 +403,12 @@ void LabdEditor::timerCallback()
 
     feedbackDisplay.setText (format::percent (raw (ids::feedback)));
     const bool wetOnly = raw (ids::wetOnly) >= 0.5f;
-    mixKnob.setOverride (wetOnly, 1.0);
+    if (mixKnob.isOverridden() != wetOnly)
+    {
+        mixKnob.setOverride (wetOnly, 1.0);
+        mixKnob.repaint();
+    }
     mixKnob.setEnabled (! wetOnly);
-    mixKnob.repaint();
     mixDisplay.setText (wetOnly ? juce::String ("100%") : format::percent (raw (ids::mix)));
     mixDisplay.setColour (wetOnly ? colours::amber : colours::cream);
     outputDisplay.setText (format::decibels (raw (ids::output)));
@@ -606,8 +603,13 @@ bool LabdEditor::keyPressed (const juce::KeyPress& key)
 
 void LabdEditor::mouseDown (const juce::MouseEvent&)
 {
-    // Cada gesto del usuario abre una transacción de undo propia.
-    proc.getUndoManager().beginNewTransaction();
+    // De pulsar a soltar: todos los parámetros tocados forman una sola acción de undo.
+    proc.getEditHistory().beginGroup();
+}
+
+void LabdEditor::mouseUp (const juce::MouseEvent&)
+{
+    proc.getEditHistory().endGroup();
 }
 
 } // namespace labd

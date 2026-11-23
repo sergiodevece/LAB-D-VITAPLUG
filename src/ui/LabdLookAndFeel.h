@@ -55,10 +55,10 @@ public:
     void setOverride (bool active, double proportion = 1.0) { overrideActive = active; overrideProportion = proportion; }
     bool isOverridden() const noexcept { return overrideActive; }
     double overrideValue() const noexcept { return overrideProportion; }
-    std::function<void()> onGestureStart;
     void mouseDown (const juce::MouseEvent&) override;
-    void mouseDoubleClick (const juce::MouseEvent&) override;
+    void mouseDoubleClick (const juce::MouseEvent&) override { resetToDefault(); }
     bool keyPressed (const juce::KeyPress&) override;
+    void resetToDefault();
     double defaultValue = 0.0;
 
 private:

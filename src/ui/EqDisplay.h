@@ -46,6 +46,8 @@ private:
 
     LabdProcessor& proc;
     std::array<BandView, kNumEqBands> bands {};
+    std::array<SvfCoeffs, kNumEqBands> baseCoeffs {}, modCoeffs {}; // calculados una vez por refresco
+    juce::int64 lastHash = 0;
     bool eqOn = true, bypassed = false, modulating = false;
     int selected = 2;
     int dragging = -1;
