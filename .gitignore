@@ -1,0 +1,4 @@
+/build*/
+/external/JUCE/
+/dist/
+.DS_Store

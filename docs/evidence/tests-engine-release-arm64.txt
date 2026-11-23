@@ -1,0 +1,222 @@
+LAB-D · pruebas del motor (sin JUCE)
+
+[ RUN  ] tempo.note_table_120bpm
+    · 120 BPM: 1/1=2000.0 ms, 1/4=500.0 ms, 1/8D=375.0 ms
+[ PASS ] tempo.note_table_120bpm
+[ RUN  ] tempo.range_extremes
+    · 1/1D a 20 BPM = 18000 ms; 1/32T a 400 BPM = 12.500 ms
+[ PASS ] tempo.range_extremes
+[ RUN  ] tempo.rate_fast_figures
+    · 120 BPM: 1/16=8.00 Hz, 1/16T=12.00 Hz, 1/32=16.00 Hz, 1/32T=24.00 Hz
+[ PASS ] tempo.rate_fast_figures
+[ RUN  ] tempo.bar_vs_whole_in_3_4
+    · 3/4 a 120 BPM: 1 BAR = 0.6667 Hz (1500 ms), 1/1 = 0.5000 Hz (2000 ms)
+[ PASS ] tempo.bar_vs_whole_in_3_4
+[ RUN  ] delay.sync_120bpm_48k
+    · 1/1 @120 BPM/48 kHz: primer eco en muestra 96000 (2000.000 ms), nivel 1.000000
+    · 1/4 @120 BPM/48 kHz: primer eco en muestra 24000 (500.000 ms), nivel 1.000000
+    · 1/8D @120 BPM/48 kHz: primer eco en muestra 18000 (375.000 ms), nivel 1.000000
+[ PASS ] delay.sync_120bpm_48k
+[ RUN  ] delay.free_time_and_extremes
+    · libre 350 ms: eco en muestra 16800, nivel 1.000000
+    · libre 1 ms: eco en muestra 48, nivel 1.000000
+    · libre 4000 ms: eco en muestra 192000, nivel 1.000000
+    · libre 123 ms: eco en muestra 5904, nivel 1.000000
+[ PASS ] delay.free_time_and_extremes
+[ RUN  ] delay.other_bpm_and_rates
+    · 1/4 @90.0 BPM, 48.0 kHz: eco en 32000 (esperado 32000.00), pico 1.0000
+    · 1/8T @140.0 BPM, 48.0 kHz: eco en 6857 (esperado 6857.14), pico 0.9534
+    · 1/8D @120.0 BPM, 44.1 kHz: eco en 16537 (esperado 16537.50), pico 0.5625
+    · 1/16 @120.0 BPM, 96.0 kHz: eco en 12000 (esperado 12000.00), pico 1.0000
+    · 1/32T @400.0 BPM, 48.0 kHz: eco en 600 (esperado 600.00), pico 1.0000
+    · 1/4D @97.3 BPM, 44.1 kHz: eco en 40791 (esperado 40791.37), pico 0.7375
+[ PASS ] delay.other_bpm_and_rates
+[ RUN  ] delay.longest_figure_20bpm_18s
+    · 1/1D a 20 BPM: eco en 864000 muestras = 18.000 s (búfer 1048576 muestras/canal)
+[ PASS ] delay.longest_figure_20bpm_18s
+[ RUN  ] delay.missing_bpm_uses_120_then_last_valid
+    · sin BPM del host: 1/4 → muestra 24000 (120 BPM de reserva)
+    · BPM 100 y luego ausente: eco en 28800 (600 ms), telemetría 100.0 BPM
+[ PASS ] delay.missing_bpm_uses_120_then_last_valid
+[ RUN  ] delay.sync_mode_memory_and_link
+    · LINK parte de L (350 ms / 1/8D); al soltarlo R vuelve a 500 ms / 1/4
+[ PASS ] delay.sync_mode_memory_and_link
+[ RUN  ] delay.tempo_change_smooth
+    · rampa 120→60 BPM con FB 60 %: salto máximo 0.0234, referencia de un tono limpio 0.0230
+    · tras pasar a 60 BPM: 1/4 → eco en 48000 (1000 ms)
+[ PASS ] delay.tempo_change_smooth
+[ RUN  ] delay.fractional_time_interpolated
+    · 350,01 ms: pico en 16800; tono 1 kHz retardado con amplitud 0.50000 (entrada 0,5)
+[ PASS ] delay.fractional_time_interpolated
+[ RUN  ] delay.time_jump_crossfade_no_click
+    · saltos de TIME/SYNC/LINK cada 250 ms: peor salto 0.0553, referencia estática 0.0576 (x0.96)
+[ PASS ] delay.time_jump_crossfade_no_click
+[ RUN  ] channels.stereo_independent_asymmetric
+    · STEREO impulso L eco 1: canal L, 100.000 ms, nivel 1.00000
+    · STEREO impulso L eco 2: canal L, 200.000 ms, nivel 0.50000
+    · STEREO impulso L eco 3: canal L, 300.000 ms, nivel 0.25000
+    · STEREO impulso R eco 1: canal R, 150.000 ms, nivel 0.80000
+    · STEREO impulso R eco 2: canal R, 300.000 ms, nivel 0.40000
+    · STEREO impulso R eco 3: canal R, 450.000 ms, nivel 0.20000
+[ PASS ] channels.stereo_independent_asymmetric
+[ RUN  ] channels.pingpong_alternation
+    · PING PONG impulso L (suma mono = 0,5) eco 1: canal L, 100.000 ms, nivel 0.50000
+    · PING PONG impulso L (suma mono = 0,5) eco 2: canal R, 250.000 ms, nivel 0.25000
+    · PING PONG impulso L (suma mono = 0,5) eco 3: canal L, 350.000 ms, nivel 0.12500
+    · PING PONG impulso L (suma mono = 0,5) eco 4: canal R, 500.000 ms, nivel 0.06250
+    · PING PONG impulso centrado eco 1: canal L, 100.000 ms, nivel 1.00000
+    · PING PONG impulso centrado eco 2: canal R, 250.000 ms, nivel 0.50000
+    · PING PONG impulso centrado eco 3: canal L, 350.000 ms, nivel 0.25000
+    · PING PONG impulso centrado eco 4: canal R, 500.000 ms, nivel 0.12500
+[ PASS ] channels.pingpong_alternation
+[ RUN  ] channels.pingpong_smoke_case_120bpm
+    · L 375.0 ms 1.0000 · R 875.0 ms 0.3500 · L 1250.0 ms 0.1225
+[ PASS ] channels.pingpong_smoke_case_120bpm
+[ RUN  ] channels.dual_mono_input_stereo_mode
+[ PASS ] channels.dual_mono_input_stereo_mode
+[ RUN  ] channels.mono_engine_uses_time_l
+    · mono→mono STEREO: ecos a 100/200/300 ms con 1, 0,5, 0,25 (TIME L, realimentación mono)
+    · mono→mono PING PONG: ecos a 100/200/300 ms con 1, 0,5, 0,25 (TIME L, realimentación mono)
+[ PASS ] channels.mono_engine_uses_time_l
+[ RUN  ] channels.feedback_zero_and_high
+    · FB 0 %: un único eco. FB 98 %: 50 ecos a k·10 ms con nivel 0,98^k (error máx. 4.33e-07); eco 50 = 0.3716
+[ PASS ] channels.feedback_zero_and_high
+[ RUN  ] channels.pan_full_travel_single_channel_echo
+    · eco solo en L, PAN -1.0 → L 1.0000 R 0.0000
+    · eco solo en L, PAN -0.5 → L 1.0000 R 0.0000
+    · eco solo en L, PAN +0.0 → L 1.0000 R 0.0000
+    · eco solo en L, PAN +0.5 → L 0.7071 R 0.7071
+    · eco solo en L, PAN +1.0 → L -0.0000 R 1.0000
+[ PASS ] channels.pan_full_travel_single_channel_echo
+[ RUN  ] channels.clean_path_bit_exact
+    · ruido retardado 20/30 ms: 0 diferencias de muestra (bit a bit)
+[ PASS ] channels.clean_path_bit_exact
+[ RUN  ] eq.band_types_tone_response
+    · LOW CUT 100 Hz Q0,707      tono     50 Hz: medido -12.305 dB · curva del editor -12.305 dB
+    · LOW CUT 100 Hz en corte    tono    100 Hz: medido  -3.010 dB · curva del editor  -3.010 dB
+    · LOW SHELF +6 dB 200 Hz     tono     25 Hz: medido  +5.998 dB · curva del editor  +5.998 dB
+    · BELL +12 dB 1 kHz Q2       tono   1000 Hz: medido +12.000 dB · curva del editor +12.000 dB
+    · BELL -9 dB 3 kHz Q1        tono   3000 Hz: medido  -9.000 dB · curva del editor  -9.000 dB
+    · BELL +18 dB 6 kHz Q8       tono   6000 Hz: medido +18.000 dB · curva del editor +18.000 dB
+    · HIGH CUT 2 kHz             tono   2000 Hz: medido  -3.010 dB · curva del editor  -3.010 dB
+    · HIGH CUT 2 kHz a 8 kHz     tono   8000 Hz: medido -25.692 dB · curva del editor -25.692 dB
+    · HIGH SHELF -6 dB 4 kHz     tono  18000 Hz: medido  -5.999 dB · curva del editor  -5.999 dB
+[ PASS ] eq.band_types_tone_response
+[ RUN  ] eq.flat_bands_are_identity
+    · INIT del EQ (bandas 2-5 a 0 dB, 1 y 6 fuera): diferencia máxima 0.00e+00
+[ PASS ] eq.flat_bands_are_identity
+[ RUN  ] eq.only_wet_and_loop_gain_unchanged
+    · seco en t=0: plano 0.500, realce 0.500 · ganancia por vuelta: plano 0.60000, realce +12 dB 0.60000 (FB 0,6)
+[ PASS ] eq.only_wet_and_loop_gain_unchanged
+[ RUN  ] eq.frequency_clamped_below_nyquist
+    · 44,1 kHz: banda 5 a 20 kHz x4 → 19845.0 Hz (0,45·fs); banda 1 a 5 Hz → 20.0 Hz
+[ PASS ] eq.frequency_clamped_below_nyquist
+[ RUN  ] eq.extreme_modulation_stable
+    · 6 bandas Q8 +18 dB moduladas ±5 oct a 30 Hz: pico 8.7 (cascada de 6 x +18 dB = x251189), finito
+[ PASS ] eq.extreme_modulation_stable
+[ RUN  ] eq.switches_smooth
+    · conmutaciones IN/EQ IN/tipo cada 100 ms: peor salto 0.1424, tono limpio de igual pico 0.1431 (estático 0.1173)
+[ PASS ] eq.switches_smooth
+[ RUN  ] lfo.rate_free_and_sync_measured
+    · RATE libre 0,50 Hz    a 120 BPM: medido 0.5000 Hz (esperado 0.50)
+    · RATE libre 20 Hz      a 120 BPM: medido 20.0000 Hz (esperado 20.00)
+    · RATE libre 35 Hz → 20 a 120 BPM: medido 20.0000 Hz (esperado 20.00)
+    · RATE 1/16             a 120 BPM: medido 8.0000 Hz (esperado 8.00)
+    · RATE 1/16T            a 120 BPM: medido 12.0000 Hz (esperado 12.00)
+    · RATE 1/32             a 120 BPM: medido 16.0000 Hz (esperado 16.00)
+    · RATE 1/32T            a 120 BPM: medido 24.0000 Hz (esperado 24.00)
+    · RATE 1/2              a 120 BPM: medido 1.0000 Hz (esperado 1.00)
+[ PASS ] lfo.rate_free_and_sync_measured
+[ RUN  ] lfo.time_ms_with_rate_1_32T
+    · TIME L 350 ms + RATE 1/32T: LFO 24.000 Hz, tiempo efectivo 350.0 ms
+[ PASS ] lfo.time_ms_with_rate_1_32T
+[ RUN  ] lfo.bar_vs_whole_3_4_measured
+    · 3/4 a 120 BPM: 1 BAR 0.6667 Hz, 1/1 0.5000 Hz; sin compás (4/4) 1 BAR 0.5000 Hz
+[ PASS ] lfo.bar_vs_whole_3_4_measured
+[ RUN  ] lfo.each_destination_and_all_together
+    · destino 1: banda 1 recorre 21.3-169.4 Hz (base 60, ±1,5 oct)
+    · destino 2: banda 2 recorre 53.1-423.4 Hz (base 150, ±1,5 oct)
+    · destino 3: banda 3 recorre 177.1-1411.3 Hz (base 500, ±1,5 oct)
+    · destino 4: banda 4 recorre 531.4-4234.0 Hz (base 1500, ±1,5 oct)
+    · destino 5: banda 5 recorre 1417.1-11290.6 Hz (base 4000, ±1,5 oct)
+    · destino 6: banda 6 recorre 3188.5-20000.0 Hz (base 9000, ±1,5 oct)
+    · destino PAN: PAN recorre -0.998..0.998
+    · todos: PAN recorre -0.998..0.998
+[ PASS ] lfo.each_destination_and_all_together
+[ RUN  ] lfo.zero_depth_neutral
+    · LFO encendido con profundidades 0 % frente a apagado: 0 muestras distintas
+[ PASS ] lfo.zero_depth_neutral
+[ RUN  ] lfo.on_off_ramps
+    · OFF: compuerta 0.992 a +0,3 ms, 0.496 a +40 ms, 0.000 al final; PAN final 0.000
+[ PASS ] lfo.on_off_ramps
+[ RUN  ] lfo.square_saw_edges_smoothed
+    · SQR 2 Hz: salto máx. de PAN por 16 muestras 0.129; extremos -1.000..1.000
+    · SAW 2 Hz: salto máx. de PAN por 16 muestras 0.128; extremos -0.921..0.981
+[ PASS ] lfo.square_saw_edges_smoothed
+[ RUN  ] lfo.random_reproducible_and_phase
+    · RND con semilla fija: dos renders offline con 0 diferencias
+[ PASS ] lfo.random_reproducible_and_phase
+[ RUN  ] lfo.auto_mode_follower
+    · AUTO: 0.500 Hz (1 compás); PAN máx. sin señal 1.000, con señal a -6 dBFS 0.150
+    · AUTO: escala de profundidad 0.150 con señal, 1.000 1 s después de callar
+[ PASS ] lfo.auto_mode_follower
+[ RUN  ] lfo.bands_off_no_modulation_pan_still_works
+    · EQ IN apagado: modular bandas cambia 0 muestras; banda 3 apagada: 0; PAN sigue llegando a 0.996
+[ PASS ] lfo.bands_off_no_modulation_pan_still_works
+[ RUN  ] lfo.host_resync_and_bpm_continuity
+    · arranque ppq 10,25 → fase 0.2507; BPM variable: avance máx. 0.00083 ciclos/16 muestras; locate a 33,5 → fase 0.5006
+[ PASS ] lfo.host_resync_and_bpm_continuity
+[ RUN  ] mix.extremes_wet_only_output_bypass
+    · MIX 0: seco exacto · MIX 25 %: 0,75/0,25 · WET ONLY: 0/1 con MIX intacto · OUTPUT -24/+12 dB tras MIX · BYPASS con OUTPUT +12: 0 diferencias
+[ PASS ] mix.extremes_wet_only_output_bypass
+[ RUN  ] mix.bypass_transition_smooth
+    · BYPASS/WET ONLY cada 200/300 ms: peor salto 0.0435, tono limpio del mismo pico 0.0435
+[ PASS ] mix.bypass_transition_smooth
+[ RUN  ] mix.drive_and_tape_character
+    · CLEAN DRIVE 0    nivel fundamental  -0.00 dB · THD  0.000 % · H2 -240.0 dB · H3 -166.8 dB
+    · CLEAN DRIVE 50   nivel fundamental  -2.16 dB · THD  6.217 % · H2 -240.0 dB · H3  -24.4 dB
+    · CLEAN DRIVE 100  nivel fundamental  -5.05 dB · THD 17.341 % · H2 -240.0 dB · H3  -15.5 dB
+    · TAPE DRIVE 0     nivel fundamental  -1.75 dB · THD  6.246 % · H2  -30.8 dB · H3  -25.2 dB
+    · TAPE DRIVE 50    nivel fundamental  -5.83 dB · THD 17.532 % · H2  -25.5 dB · H3  -15.8 dB
+    · TAPE DRIVE 100   nivel fundamental  -9.25 dB · THD 22.820 % · H2  -26.7 dB · H3  -13.5 dB
+[ PASS ] mix.drive_and_tape_character
+[ RUN  ] mix.tape_evolves_on_recirculation
+    · TAPE: brillo relativo de las repeticiones 1/3/5 = 1.206 / 0.319 / 0.138
+[ PASS ] mix.tape_evolves_on_recirculation
+[ RUN  ] dyn.duck_reduces_and_recovers
+    · DUCK 100 %: wet -36.0 dB durante la fuente, -0.10 dB en el hueco (+0,6-1,4 s), cola -0.001 dB
+    · DUCK 50 %: -18.0 dB durante la fuente
+[ PASS ] dyn.duck_reduces_and_recovers
+[ RUN  ] stability.silence_and_finite
+    · silencio → salida 0 exacta · ruido 0 dBFS, FB 98 %, TAPE DRIVE 100: pico 0.079, RMS a 7-8 s tras la fuente -236.2 dBFS
+[ PASS ] stability.silence_and_finite
+[ RUN  ] stability.clean_fb98_long_tail_decays
+    · CLEAN FB 98 %: RMS a 5-6 s -93.3 dBFS
+[ PASS ] stability.clean_fb98_long_tail_decays
+[ RUN  ] stability.automation_no_clicks
+    · 2.ª diferencia máxima: automatizado 0.00130 (en 8.878 s, canal L) · referencia estática 0.00069 · x1.89
+[ PASS ] stability.automation_no_clicks
+[ RUN  ] stability.automation_peaks_with_impulses
+    · tono + impulsos con automatización: pico 0.800 vs referencia estática (FB 95 %) 0.412
+[ PASS ] stability.automation_peaks_with_impulses
+[ RUN  ] stability.sample_rates_and_block_sizes
+    · 44.1 kHz: estático idéntico con bloques 1/16/64/333/512/4096; con LFO+DUCK 64 vs 512 difiere -240.0 dB bajo la señal
+    · 48.0 kHz: estático idéntico con bloques 1/16/64/333/512/4096; con LFO+DUCK 64 vs 512 difiere -240.0 dB bajo la señal
+    · 96.0 kHz: estático idéntico con bloques 1/16/64/333/512/4096; con LFO+DUCK 64 vs 512 difiere -240.0 dB bajo la señal
+[ PASS ] stability.sample_rates_and_block_sizes
+[ RUN  ] stability.offline_reproducible_and_reset
+    · dos renders offline idénticos (0 diferencias); tras reset() la salida es silencio
+[ PASS ] stability.offline_reproducible_and_reset
+[ RUN  ] stability.layout_changes
+[ PASS ] stability.layout_changes
+[ RUN  ] rt.no_allocation_in_process
+    · reservas de memoria durante process(): 0
+[ PASS ] rt.no_allocation_in_process
+[ RUN  ] rt.interpolator_gain_bounded
+    · ganancia máxima de la interpolación Hermite en cualquier fracción y frecuencia: 1.000000000
+[ PASS ] rt.interpolator_gain_bounded
+[ RUN  ] stability.soft_reset_fades_then_clears
+    · reinicio suave: cola previa 1.785, mayor salto durante el fundido 0.0757, después 0.0; eco nuevo 1.000
+[ PASS ] stability.soft_reset_fades_then_clears
+
+53 casos, 53 PASS, 0 FAIL (filtro "")

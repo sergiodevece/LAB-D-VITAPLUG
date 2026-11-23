@@ -1,0 +1,37 @@
+Test project /Users/serx/Documents/VITAPLUG/LAB_D/build/release
+      Start  1: engine.tempo
+ 1/14 Test  #1: engine.tempo .....................   Passed    0.00 sec
+      Start  2: engine.delay
+ 2/14 Test  #2: engine.delay .....................   Passed    0.06 sec
+      Start  3: engine.channels
+ 3/14 Test  #3: engine.channels ..................   Passed    0.01 sec
+      Start  4: engine.eq
+ 4/14 Test  #4: engine.eq ........................   Passed    0.02 sec
+      Start  5: engine.lfo
+ 5/14 Test  #5: engine.lfo .......................   Passed    0.21 sec
+      Start  6: engine.mix
+ 6/14 Test  #6: engine.mix .......................   Passed    0.02 sec
+      Start  7: engine.dyn
+ 7/14 Test  #7: engine.dyn .......................   Passed    0.02 sec
+      Start  8: engine.stability
+ 8/14 Test  #8: engine.stability .................   Passed    0.24 sec
+      Start  9: engine.rt
+ 9/14 Test  #9: engine.rt ........................   Passed    0.01 sec
+      Start 10: plugin.params
+10/14 Test #10: plugin.params ....................   Passed    0.02 sec
+      Start 11: plugin.state
+11/14 Test #11: plugin.state .....................   Passed    0.02 sec
+      Start 12: plugin.layout
+12/14 Test #12: plugin.layout ....................   Passed    0.07 sec
+      Start 13: plugin.wrapper
+13/14 Test #13: plugin.wrapper ...................   Passed    0.10 sec
+      Start 14: plugin.editor
+14/14 Test #14: plugin.editor ....................   Passed    0.10 sec
+
+100% tests passed out of 14
+
+Label Time Summary:
+engine    =   0.60 sec*proc (9 tests)
+plugin    =   0.31 sec*proc (5 tests)
+
+Total Test time (real) =   0.92 sec
