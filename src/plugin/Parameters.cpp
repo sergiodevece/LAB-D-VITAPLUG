@@ -74,14 +74,36 @@ Range logRange (float lo, float hi)
                   [] (float a, float b, float v) { return juce::jlimit (a, b, v); });
 }
 
-float parseNumber (const juce::String& text)
+enum class Unit { Plain, Time, Frequency };
+
+// Lee el número inicial y su unidad. "1.5k" / "1,5 kHz" → 1500 (frecuencia);
+// "1.2 s" → 1200 y "350 ms" → 350 (tiempo); "−3.5 dB" → −3,5. Un texto que no
+// empieza por un número (o que contiene '/') no es válido y devuelve 'fallback'.
+float parseValue (const juce::String& text, Unit unit, float fallback)
 {
     auto t = text.trim().toLowerCase().replace (juce::CharPointer_UTF8 ("\xe2\x88\x92"), "-").replace (",", ".");
-    float mult = 1.0f;
-    if (t.contains ("k"))
-        mult = 1000.0f;
-    return t.retainCharacters ("0123456789.-+").getFloatValue() * mult;
+    if (t.containsChar ('/'))
+        return fallback;
+    int i = 0;
+    const int n = t.length();
+    if (i < n && (t[i] == '-' || t[i] == '+'))
+        ++i;
+    const int digitsStart = i;
+    while (i < n && (juce::CharacterFunctions::isDigit (t[i]) || t[i] == '.'))
+        ++i;
+    if (i == digitsStart)
+        return fallback;
+    const double v = t.substring (0, i).getDoubleValue();
+    const auto suffix = t.substring (i).trim();
+    double mult = 1.0;
+    if (unit == Unit::Frequency && suffix.startsWith ("k"))
+        mult = 1000.0;
+    else if (unit == Unit::Time && (suffix == "s" || suffix.startsWith ("sec") || suffix.startsWith ("seg")))
+        mult = 1000.0;
+    return std::isfinite (v) ? (float) (v * mult) : fallback;
 }
+
+float parseNumber (const juce::String& text) { return parseValue (text, Unit::Plain, 0.0f); }
 
 juce::StringArray noteLabels()
 {
@@ -104,10 +126,14 @@ std::unique_ptr<juce::AudioParameterFloat> floatParam (const juce::String& id, c
                                                        std::function<juce::String (float)> toText,
                                                        std::function<float (const juce::String&)> fromText = nullptr)
 {
+    const Unit unit = label == "ms" ? Unit::Time : (label == "Hz" ? Unit::Frequency : Unit::Plain);
     auto attrs = juce::AudioParameterFloatAttributes()
                      .withLabel (label)
                      .withStringFromValueFunction ([toText] (float v, int) { return toText (v); });
-    attrs = attrs.withValueFromStringFunction (fromText ? fromText : parseNumber);
+    // Texto no válido: se mantiene el valor por defecto en lugar de un número basura.
+    attrs = attrs.withValueFromStringFunction (fromText ? fromText
+                                                        : std::function<float (const juce::String&)> (
+                                                              [unit, def] (const juce::String& t) { return parseValue (t, unit, def); }));
     return std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { id, kParameterVersion }, name, range, def, attrs);
 }
 
@@ -131,6 +157,11 @@ std::unique_ptr<juce::AudioParameterChoice> choiceParam (const juce::String& id,
 
 juce::String numberOnly (double v, int decimals) { return juce::String (v, decimals); }
 } // namespace
+
+bool isNumericText (const juce::String& text)
+{
+    return ! std::isnan (parseValue (text, Unit::Plain, std::numeric_limits<float>::quiet_NaN()));
+}
 
 juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
 {

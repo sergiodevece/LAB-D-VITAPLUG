@@ -23,9 +23,18 @@ public:
     EditHistory (juce::AudioProcessor& processor, juce::UndoManager& undoManager);
     ~EditHistory() override;
 
+    // Un grupo por pulsación del ratón (no se anida: un mouseUp perdido no puede
+    // dejar el historial bloqueado).
     void beginGroup();
     void endGroup();
     void closeAllGroups(); // p. ej. al cerrar el editor a mitad de un arrastre
+
+    // Vaciar el historial (al restaurar un estado). Se puede pedir desde cualquier
+    // hilo; se ejecuta en el hilo de mensajes con service().
+    void requestClear() noexcept { clearPending.store (true); }
+    void service();
+
+    static constexpr double kCoalesceMs = 500.0; // rueda: ediciones seguidas = un paso
 
 private:
     struct Change
@@ -40,6 +49,8 @@ private:
         bool perform() override;
         bool undo() override;
         int getSizeInUnits() override { return (int) changes.size() * 4 + 8; }
+        bool sameSingleParameter (const std::vector<Change>& other) const;
+        void mergeAfter (const std::vector<Change>& other);
 
     private:
         void apply (bool after);
@@ -57,6 +68,9 @@ private:
     std::map<int, Change> pending;
     int openGestures = 0, groupDepth = 0;
     bool applying = false;
+    std::atomic<bool> clearPending { false };
+    Action* lastAction = nullptr; // la acción más reciente (para agrupar la rueda)
+    double lastCommitMs = 0.0;
 };
 
 } // namespace labd

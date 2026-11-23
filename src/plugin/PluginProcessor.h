@@ -75,6 +75,9 @@ public:
 
     static constexpr int kStateVersion = 1;
 
+    // Cola que se comunica al host, calculada con los parámetros actuales.
+    static double tailSecondsFor (const EngineParams& p, double bpm);
+
 private:
     void runEngine (juce::AudioBuffer<float>& buffer, bool forceBypass);
     void publishTelemetry() noexcept;
@@ -86,8 +89,10 @@ private:
     UiTelemetry telemetry;
     EditHistory editHistory { *this, undoManager }; // undo solo de gestos del editor
     std::atomic<bool> resetRequested { false };
+    // Último bloque procesado (hilo de audio): distingue un reinicio en mitad del
+    // audio de uno tras una pausa del host.
+    double lastBlockEndMs = 0.0, lastBlockDurationMs = 0.0;
     std::atomic<int> selectedBand { 2 }; // estado del editor; se guarda con la sesión
-    std::atomic<float> tailSeconds { 2.0f };
     double currentSampleRate = 48000.0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (LabdProcessor)

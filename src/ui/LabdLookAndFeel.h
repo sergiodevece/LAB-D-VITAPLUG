@@ -72,7 +72,14 @@ public:
     enum class Style { Box, Large, Plain, PlainRight };
     explicit ValueDisplay (Style s = Style::Box) : style (s) {}
     void setText (const juce::String& main, const juce::String& sub = {});
-    void setColour (juce::Colour c) { textColour = c; repaint(); }
+    void setColour (juce::Colour c)
+    {
+        if (c != textColour)
+        {
+            textColour = c;
+            repaint();
+        }
+    }
     void paint (juce::Graphics&) override;
     void mouseDoubleClick (const juce::MouseEvent&) override;
     std::function<void (const juce::String&)> onTextEntered; // nullptr = no editable

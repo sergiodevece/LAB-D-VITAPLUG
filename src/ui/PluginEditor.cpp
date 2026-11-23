@@ -92,6 +92,10 @@ void LabdEditor::bindTextEntry (ValueDisplay& display, std::function<juce::Strin
                     return; // texto no válido: no cambia nada
                 v = p->convertTo0to1 ((float) idx);
             }
+            else if (! isNumericText (t))
+            {
+                return; // p. ej. "1/4" con TIME en ms: no cambia nada
+            }
             p->beginChangeGesture();
             p->setValueNotifyingHost (v);
             p->endChangeGesture();
@@ -300,6 +304,10 @@ void LabdEditor::attachTimeKnobs (bool sync, bool link)
     const int mode = (sync ? 1 : 0) + (link ? 2 : 0);
     if (mode == attachedTimeMode)
         return;
+    // Nunca se cambia el parámetro de un mando a mitad de un arrastre: el gesto
+    // abierto debe cerrarse en el mismo parámetro (se reintenta al soltar).
+    if (timeL.isMouseButtonDown() || timeR.isMouseButtonDown())
+        return;
     attachedTimeMode = mode;
     timeLAtt.reset();
     timeRAtt.reset();
@@ -319,6 +327,8 @@ void LabdEditor::attachTimeKnobs (bool sync, bool link)
 void LabdEditor::attachEqKnobs (int band, bool shelf6)
 {
     if (band == attachedBand && (int) shelf6 == attachedShelf)
+        return;
+    if (freqKnob.isMouseButtonDown() || gainKnob.isMouseButtonDown() || qKnob.isMouseButtonDown())
         return;
     attachedBand = band;
     attachedShelf = (int) shelf6;
@@ -348,6 +358,8 @@ void LabdEditor::attachRateKnob (bool sync)
 {
     if ((int) sync == attachedRateSync)
         return;
+    if (rateKnob.isMouseButtonDown())
+        return;
     attachedRateSync = (int) sync;
     rateAtt.reset();
     rateParam = sync ? ids::lfoRateNote : ids::lfoRate;
@@ -358,6 +370,7 @@ void LabdEditor::attachRateKnob (bool sync)
 
 void LabdEditor::timerCallback()
 {
+    proc.getEditHistory().service();
     const auto& tl = proc.getTelemetry();
     const bool sync = raw (ids::timeSync) >= 0.5f;
     const bool link = raw (ids::timeLink) >= 0.5f;
@@ -585,6 +598,7 @@ void LabdEditor::Panel::paint (juce::Graphics& g)
 bool LabdEditor::keyPressed (const juce::KeyPress& key)
 {
     const auto mods = key.getModifiers();
+    proc.getEditHistory().service();
     if (mods.isCommandDown() && key.getKeyCode() == 'Z')
     {
         if (mods.isShiftDown())

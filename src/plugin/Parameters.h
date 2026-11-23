@@ -76,6 +76,9 @@ private:
     juce::AudioProcessorValueTreeState& apvts;
 };
 
+// Comprueba si un texto empieza por un número (entrada precisa del editor).
+bool isNumericText (const juce::String& text);
+
 // Formatos de texto compartidos por el host y el editor.
 namespace format {
 juce::String timeMs (double ms);

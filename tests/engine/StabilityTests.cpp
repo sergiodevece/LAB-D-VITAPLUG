@@ -291,38 +291,102 @@ TEST_CASE ("rt.interpolator_gain_bounded")
     EVIDENCE ("ganancia máxima de la interpolación Hermite en cualquier fracción y frecuencia: %.9f", worst);
 }
 
-TEST_CASE ("stability.soft_reset_fades_then_clears")
+namespace {
+// Escenario de reinicio del host: cola previa (FB 90 %) y, desde el bloque del
+// reinicio, un tono nuevo con fundido de 2 ms. TIME 100 ms (4800), WET ONLY.
+struct ResetRun
 {
-    // Reinicio del host durante la reproducción: el wet baja en 10 ms y la cola
-    // desaparece; la entrada nueva vuelve a generar ecos.
-    auto p = cleanWetParams();
-    p.feedback = 0.8f;
-    p.timeMsL = p.timeMsR = 50.0;
+    Stereo in, out;
+    size_t resetAt;
+};
+
+ResetRun runHostReset (int block, bool continuous)
+{
     const double fs = 48000.0;
-    DelayEngine e;
-    e.prepare (fs, 64, 2);
-    e.setParams (p);
-    auto s = tone ((size_t) fs, 440.0, fs, 0.5f, 0, 24000);
-    std::vector<float> outL;
-    for (size_t pos = 0; pos < s.size(); pos += 64)
+    auto p = cleanWetParams();
+    p.feedback = 0.9f;
+    p.timeMsL = p.timeMsR = 100.0;
+    const size_t resetAt = (size_t) block * (size_t) (28800 / block); // ~0,6 s, alineado al bloque
+    ResetRun r { Stereo ((size_t) fs * 2), Stereo(), resetAt };
+    for (size_t i = 0; i < 4800; ++i) // material previo: crea la cola
+        r.in.L[i] = r.in.R[i] = 0.4f * (float) std::sin (2.0 * kPi * 220.0 * (double) i / fs);
+    for (size_t i = resetAt; i < r.in.size(); ++i)
     {
-        if (pos == 30016)
-            e.beginSoftReset();
-        float* ch[2] = { s.L.data() + pos, s.R.data() + pos };
-        e.process (ch, 2, 64, hostAt (120.0));
+        const double t = (double) (i - resetAt);
+        const float fade = (float) std::min (1.0, t / 96.0);
+        r.in.L[i] = r.in.R[i] = fade * 0.3f * (float) std::sin (2.0 * kPi * 440.0 * t / fs);
     }
-    const float before = maxAbs (s.L, 28000, 30016);
-    const float during = maxStep (s.L, 30016, 30016 + 480);
-    const float after = maxAbs (s.L, 30016 + 520, s.size());
-    CHECK (before > 0.1f);
-    CHECK (after == 0.0f);
-    CHECK (during < (float) (2.0 * kPi * 440.0 / fs) * before * 1.2f);
-    CHECK (! e.isSoftResetPending());
-    // Ecos nuevos tras el reinicio.
-    auto imp = impulse (4800);
-    float* ch[2] = { imp.L.data(), imp.R.data() };
-    e.process (ch, 2, 4800, hostAt (120.0));
-    CHECK_NEAR (imp.L[2400], 1.0, 1e-6);
-    EVIDENCE ("reinicio suave: cola previa %.3f, mayor salto durante el fundido %.4f, después %.1f; eco nuevo %.3f",
-              before, during, after, imp.L[2400]);
+    DelayEngine e;
+    e.prepare (fs, block, 2);
+    e.setParams (p);
+    r.out = r.in;
+    for (size_t pos = 0; pos < r.out.size(); pos += (size_t) block)
+    {
+        if (pos == resetAt)
+            e.hostReset (continuous); // el wrapper lo aplica al principio del bloque
+        float* ch[2] = { r.out.L.data() + pos, r.out.R.data() + pos };
+        e.process (ch, 2, (int) std::min<size_t> ((size_t) block, r.out.size() - pos), hostAt (120.0));
+    }
+    return r;
+}
+} // namespace
+
+TEST_CASE ("stability.host_reset_keeps_new_audio")
+{
+    // Con el reinicio en mitad del audio, la entrada nueva se graba entera desde
+    // su primera muestra y la cola anterior se funde en 10 ms sin clic.
+    for (bool continuous : { true, false })
+        for (int block : { 64, 512 })
+        {
+            const auto r = runHostReset (block, continuous);
+            const size_t a = r.resetAt;
+            // 1) Primer eco nuevo exacto en a + 4800 y entero (bit a bit con FB 90 % del tono nuevo).
+            size_t lost = 0;
+            for (size_t i = a + 4800; i < a + 9600; ++i)
+                lost += r.out.L[i] != r.in.L[i - 4800];
+            CHECK_MSG (lost == 0, "%s, bloque %d: %zu muestras del primer eco nuevo distintas",
+                       continuous ? "continuo" : "tras pausa", block, lost);
+            // 2) Sin cola anterior entre a + 10 ms y la llegada del eco nuevo.
+            const float leftover = maxAbs (r.out.L, a + 480, a + 4800);
+            CHECK (leftover == 0.0f);
+            // 3) Tras una pausa, la cola anterior no suena en absoluto.
+            const float oldTail = maxAbs (r.out.L, a, a + 480);
+            if (! continuous)
+                CHECK (oldTail == 0.0f);
+            // 4) Con reinicio continuo, la cola se funde sin clic.
+            const float before = maxStep (r.out.L, a - 2000, a);
+            const float during = maxStep (r.out.L, a, a + 480);
+            if (continuous)
+                CHECK_MSG (during <= before * 1.1f + 1e-6f, "salto %.4f vs %.4f", during, before);
+            EVIDENCE ("reinicio %s, bloque %3d: eco nuevo en +100 ms íntegro (%zu diferencias); cola previa en los primeros 10 ms: pico %.3f, salto máx. %.4f (antes %.4f); de 10 a 100 ms: %.1f",
+                      continuous ? "continuo  " : "tras pausa", block, lost, oldTail, during, before, leftover);
+        }
+}
+
+TEST_CASE ("stability.nonfinite_input_recovers")
+{
+    // Una muestra Inf y otra NaN con DUCK y AUTO activos: el bucle y los
+    // detectores se recuperan; la salida vuelve a ser finita enseguida.
+    auto p = cleanWetParams();
+    p.wetOnly = false;
+    p.mix = 0.5f;
+    p.feedback = 0.6f;
+    p.duck = 0.5f;
+    p.lfoOn = true;
+    p.lfoAuto = true;
+    p.depth[kPanDepthIndex] = 1.0f;
+    const double fs = 48000.0;
+    auto in = tone ((size_t) fs, 330.0, fs, 0.3f);
+    in.L[1000] = std::numeric_limits<float>::infinity();
+    in.R[2000] = std::numeric_limits<float>::quiet_NaN();
+    DelayEngine e;
+    const auto out = render (p, in, {}, &e);
+    bool finiteAfter = true;
+    for (size_t i = 2001; i < out.size(); ++i)
+        finiteAfter = finiteAfter && std::isfinite (out.L[i]) && std::isfinite (out.R[i]);
+    CHECK (finiteAfter);
+    CHECK (std::isfinite (e.telemetry().duckGainDb) && std::isfinite (e.telemetry().autoScale)
+           && std::isfinite (e.telemetry().effectivePan));
+    EVIDENCE ("Inf en la muestra 1000 y NaN en la 2000: salida finita desde la 2001; DUCK %.1f dB, escala AUTO %.2f",
+              e.telemetry().duckGainDb, e.telemetry().autoScale);
 }

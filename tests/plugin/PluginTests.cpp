@@ -192,6 +192,11 @@ TEST_CASE ("params.readable_names_units_and_text_entry")
     CHECK_NEAR (gain->convertFrom0to1 (gain->getValueForText (juce::CharPointer_UTF8 ("\xe2\x88\x92" "3.5"))), -3.5, 1e-3);
     auto* pan = s.getParameter (ids::pan);
     CHECK_NEAR (pan->convertFrom0to1 (pan->getValueForText ("L30")), -30.0, 1e-3);
+    auto* tl = s.getParameter (ids::timeLMs);
+    CHECK_NEAR (tl->convertFrom0to1 (tl->getValueForText ("1.2 s")), 1200.0, 0.05);
+    CHECK_NEAR (tl->convertFrom0to1 (tl->getValueForText ("350 ms")), 350.0, 0.05);
+    CHECK_NEAR (tl->convertFrom0to1 (tl->getValueForText ("1/4")), 350.0, 0.05); // no válido: valor por defecto, no 14 ms
+    CHECK (! isNumericText ("1/4") && isNumericText ("-3.5 dB") && ! isNumericText ("abc"));
     EVIDENCE ("Time L '%s', Feedback '%s', Output '%s', EQ 4 '%s', Rate '%s'; texto '1.5k' → 1500 Hz",
               text (ids::timeLMs).toRawUTF8(), text (ids::feedback).toRawUTF8(), text (ids::output).toRawUTF8(),
               text ("eq4_freq").toRawUTF8(), text (ids::lfoRateNote).toRawUTF8());
@@ -268,7 +273,7 @@ TEST_CASE ("state.roundtrip_all_values")
     CHECK_NEAR (get (*b, ids::lfoRate), 3.3, 1e-3);   // RATE libre conservado con SYNC de RATE
     // La salida de ambos procesadores es idéntica.
     const auto in = noise (24000);
-    CHECK (identical (run (*a, in), run (*b, in)) || true);
+    CHECK (identical (run (*a, in), run (*b, in)));
     EVIDENCE ("estado de %zu bytes restaurado: %d diferencias; banda %d, MIX %.0f %% con WET ONLY, TIME L %.0f ms y %s",
               mb.getSize(), mismatches, b->getSelectedBand(), get (*b, ids::mix), get (*b, ids::timeLMs),
               b->getState().getParameter (ids::timeLNote)->getCurrentValueAsText().toRawUTF8());
@@ -469,6 +474,43 @@ TEST_CASE ("wrapper.reset_from_other_thread")
     CHECK (before > 0.05f);
     CHECK (after == 0.0f);
     EVIDENCE ("reset() desde otro hilo: cola %.3f antes, %.3f tras el fundido en el siguiente bloque", before, after);
+}
+
+TEST_CASE ("wrapper.reset_after_pause_is_complete")
+{
+    // Tras una pausa del host (stop, setProcessing(false), inicio de un bounce) el
+    // reinicio es completo: la cola previa no suena y la entrada nueva se graba entera.
+    auto p = makeProcessor();
+    wetOnlyClean (*p);
+    set (*p, ids::feedback, 90.0f);
+    set (*p, ids::timeLMs, 100.0f);
+    set (*p, ids::timeRMs, 100.0f);
+    auto warm = noise (24000);
+    run (*p, warm);
+    std::this_thread::sleep_for (std::chrono::milliseconds (80)); // el host deja de procesar
+    p->reset();
+    const auto out = run (*p, impulse (12000));
+    const float oldTail = out.getMagnitude (0, 0, 4790);
+    CHECK (oldTail == 0.0f);
+    CHECK (firstPeak (out, 0) == 4800);
+    CHECK_NEAR (out.getSample (0, 4800), 1.0, 1e-6);
+    EVIDENCE ("reset() tras 80 ms sin procesar: cola previa %.3f, eco nuevo en %d con nivel %.3f", oldTail, firstPeak (out, 0),
+              out.getSample (0, 4800));
+}
+
+TEST_CASE ("wrapper.tail_from_parameters_before_processing")
+{
+    LabdProcessor p; // sin prepareToPlay ni bloques procesados
+    set (p, ids::feedback, 70.0f);
+    set (p, ids::timeLMs, 1000.0f);
+    const double tail = p.getTailLengthSeconds();
+    CHECK (tail > 20.0 && tail < 22.0);
+    set (p, ids::feedback, 98.0f);
+    set (p, ids::timeSync, 1.0f);
+    set (p, ids::timeLNote, (float) tempo::noteIndex ("1/1D"));
+    CHECK_NEAR (p.getTailLengthSeconds(), 60.0, 1e-9);
+    EVIDENCE ("cola comunicada antes del primer bloque: FB 70 %% y 1000 ms → %.1f s; FB 98 %% y 1/1D → %.0f s (tope)", tail,
+              p.getTailLengthSeconds());
 }
 
 TEST_CASE ("wrapper.link_precedence_and_automation")
@@ -698,6 +740,8 @@ TEST_CASE ("editor.keyboard_and_double_click_are_host_gestures")
     mix->keyPressed (juce::KeyPress (juce::KeyPress::upKey));
     CHECK (counter.begins == 1 && counter.ends == 1);
     CHECK_NEAR (get (*p, ids::mix), 26.0, 0.05);
+    // Pasado el intervalo de agrupación, cada edición es un paso de undo propio.
+    std::this_thread::sleep_for (std::chrono::milliseconds ((int) EditHistory::kCoalesceMs + 100));
     mix->resetToDefault(); // lo que ejecuta el doble clic
     CHECK (counter.begins == 2 && counter.ends == 2);
     CHECK_NEAR (get (*p, ids::mix), 25.0, 0.05);
@@ -709,6 +753,14 @@ TEST_CASE ("editor.keyboard_and_double_click_are_host_gestures")
     CHECK_NEAR (get (*p, ids::mix), 25.0, 0.05);
     // La automatización del host (sin gesto) no se registra.
     set (*p, ids::mix, 70.0f);
+    CHECK (! undo.canUndo());
+    // Varias ediciones rápidas del mismo mando (rueda, flechas) = un solo paso.
+    auto* out = dynamic_cast<ui::Knob*> (e->findById ("mix"));
+    for (int k = 0; k < 10; ++k)
+        out->keyPressed (juce::KeyPress (juce::KeyPress::upKey));
+    CHECK_NEAR (get (*p, ids::mix), 80.0, 0.1);
+    CHECK (undo.undo());
+    CHECK_NEAR (get (*p, ids::mix), 70.0, 0.1);
     CHECK (! undo.canUndo());
     EVIDENCE ("flecha arriba y doble clic en MIX: %d gestos abiertos/%d cerrados; dos undo vuelven a 26 %% y 25 %%; la automatización no entra en el historial",
               counter.begins, counter.ends);

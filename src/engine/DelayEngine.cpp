@@ -81,25 +81,25 @@ void DelayEngine::prepare (double sampleRate, int /*maxBlockSize*/, int numChann
     for (auto& d : depthS)
         d.prepare (fs, 0.050);
     panBaseS.prepare (fs, 0.030);
-    resetFadeS.prepare (fs, 0.010);
+    ghostS.prepare (fs, 0.010);
 
     reset();
 }
 
-void DelayEngine::beginSoftReset() noexcept
-{
-    if (softResetActive)
-        return;
-    softResetActive = true;
-    resetFadeS.setTarget (0.0f);
-}
-
-void DelayEngine::finishSoftReset() noexcept
+void DelayEngine::hostReset (bool continuousAudio) noexcept
 {
     for (auto& l : lines)
         l.forget();
     for (auto& c : colors)
         c.reset();
+    if (continuousAudio)
+    {
+        ghostActive = true;
+        ghostS.reset (1.0f);
+        ghostS.setTarget (0.0f);
+        return;
+    }
+    ghostActive = false;
     eq.reset();
     lfo.reset (0.0);
     lfoSmoothed = 0.0f;
@@ -108,8 +108,6 @@ void DelayEngine::finishSoftReset() noexcept
     duckHold = 0;
     wasPlaying = false;
     lfoSynced = false;
-    softResetActive = false;
-    resetFadeS.reset (1.0f);
 }
 
 void DelayEngine::reset()
@@ -127,8 +125,9 @@ void DelayEngine::reset()
     wasPlaying = false;
     lfoSynced = false;
     needsSnap = true;
-    softResetActive = false;
-    resetFadeS.reset (1.0f);
+    ghostActive = false;
+    bypassCleared = false;
+    ghostS.reset (0.0f);
 }
 
 void DelayEngine::effectiveTimesMs (const EngineParams& p, double bpm, double& left, double& right) noexcept
@@ -288,7 +287,7 @@ void DelayEngine::process (float* const* io, int numChannels, int n, const Trans
         const PanGains g0 = panGains (panPrev), g1 = panGains (panNow);
 
         // --- Bucle de retardo (por muestra) -----------------------------------
-        float dryL[kSubBlock], dryR[kSubBlock], wetL[kSubBlock], wetR[kSubBlock];
+        float dryL[kSubBlock], dryR[kSubBlock], wetL[kSubBlock], wetR[kSubBlock], bypass[kSubBlock];
         const float lpA = colors[0].lowPassCoefficient (driveS.getCurrent());
         const float makeupPrev = makeupNow;
 
@@ -299,7 +298,10 @@ void DelayEngine::process (float* const* io, int numChannels, int n, const Trans
             dryL[s] = xL;
             dryR[s] = xR;
 
-            const float level = std::max (std::abs (xL), std::abs (xR));
+            // Detectores: una muestra no finita no debe dejarlos en NaN/Inf para siempre.
+            float level = std::max (std::abs (xL), std::abs (xR));
+            if (! (level < 1.0e6f))
+                level = 0.0f;
             if (level > duckEnv)
             {
                 duckEnv += dEnvA * (level - duckEnv);
@@ -315,25 +317,34 @@ void DelayEngine::process (float* const* io, int numChannels, int n, const Trans
             const float drv = driveS.next();
             const float tp = tapeS.next();
             const float pp = pingPongS.next();
+            const float byp = bypassS.next();
+            bypass[s] = byp;
+            // Con BYPASS la entrada deja de grabarse en el bucle (rampa con el bypass).
+            const float send = 1.0f - byp;
+            const float sL = send == 1.0f ? xL : xL * send;
+            const float sR = send == 1.0f ? xR : xR * send;
+            // Cola anterior a un reinicio del host: solo a la salida, nunca al bucle.
+            const float ghostGain = ghostActive ? ghostS.next() : 0.0f;
 
-            const float eL = readers[0].process (lines[0]);
+            float gL = 0.0f, gR = 0.0f;
+            const float eL = readers[0].process (lines[0], ghostActive ? &gL : nullptr);
             float inL = 0.0f;
             if (nch == 1)
             {
-                inL = xL + fb * eL;
-                wetL[s] = eL;
+                inL = sL + fb * eL;
+                wetL[s] = ghostActive ? eL + ghostGain * gL : eL;
                 wetR[s] = 0.0f;
             }
             else
             {
-                const float eR = readers[1].process (lines[1]);
-                inL = xL + fb * eL;
-                float inR = xR + fb * eR;
+                const float eR = readers[1].process (lines[1], ghostActive ? &gR : nullptr);
+                inL = sL + fb * eL;
+                float inR = sR + fb * eR;
                 if (pp > 0.0f)
                 {
                     // PING PONG: la entrada (suma mono) entra por L y la
                     // realimentación se cruza L <-> R.
-                    const float ppL = 0.5f * (xL + xR) + fb * eR;
+                    const float ppL = 0.5f * (sL + sR) + fb * eR;
                     const float ppR = fb * eL;
                     inL += pp * (ppL - inL);
                     inR += pp * (ppR - inR);
@@ -342,8 +353,8 @@ void DelayEngine::process (float* const* io, int numChannels, int n, const Trans
                 if (! (std::abs (wR) < 1.0e6f))
                     wR = 0.0f; // protección del bucle ante NaN/Inf
                 lines[1].push (wR);
-                wetL[s] = eL;
-                wetR[s] = eR;
+                wetL[s] = ghostActive ? eL + ghostGain * gL : eL;
+                wetR[s] = ghostActive ? eR + ghostGain * gR : eR;
             }
             float wL = colors[0].process (inL, drv, tp, lpA);
             if (! (std::abs (wL) < 1.0e6f))
@@ -390,13 +401,12 @@ void DelayEngine::process (float* const* io, int numChannels, int n, const Trans
             duckGain += (duckTarget < duckGain ? dGainA : dGainR) * (duckTarget - duckGain);
             if (std::abs (duckTarget - duckGain) < 1.0e-6f)
                 duckGain = duckTarget;
-            const float wetGain = softResetActive ? duckGain * resetFadeS.next() : duckGain;
-            wl *= wetGain;
-            wr *= wetGain;
+            wl *= duckGain;
+            wr *= duckGain;
 
             const float m = mixS.next();
             const float og = outputS.next();
-            const float byp = bypassS.next();
+            const float byp = bypass[s];
 
             float oL = (dryL[s] * (1.0f - m) + wl * m) * og;
             if (byp >= 1.0f)
@@ -416,8 +426,26 @@ void DelayEngine::process (float* const* io, int numChannels, int n, const Trans
             }
         }
 
-        if (softResetActive && ! resetFadeS.isSmoothing() && resetFadeS.getCurrent() == 0.0f)
-            finishSoftReset();
+        if (ghostActive && ! ghostS.isSmoothing() && ghostS.getCurrent() == 0.0f)
+            ghostActive = false;
+
+        // BYPASS completo: la salida ya es el seco exacto, así que la cola se vacía
+        // (en silencio). Al salir del bypass el delay arranca limpio, igual en AU
+        // (donde JUCE emite además un Reset al activar el bypass) y en VST3.
+        if (bypassS.getCurrent() >= 1.0f && ! bypassS.isSmoothing())
+        {
+            if (! bypassCleared)
+            {
+                for (auto& l : lines)
+                    l.forget();
+                for (auto& c : colors)
+                    c.reset();
+                ghostActive = false;
+                bypassCleared = true;
+            }
+        }
+        else
+            bypassCleared = false;
     }
 
     // --- Telemetría ------------------------------------------------------------

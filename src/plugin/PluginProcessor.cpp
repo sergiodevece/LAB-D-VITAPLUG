@@ -36,6 +36,8 @@ void LabdProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     engine.prepare (sampleRate, samplesPerBlock, juce::jlimit (1, 2, outCh));
     engine.setParams (refs.read());
     resetRequested.store (false);
+    lastBlockEndMs = 0.0;
+    lastBlockDurationMs = 0.0;
     telemetry.inputChannels.store (getTotalNumInputChannels());
     telemetry.outputChannels.store (outCh);
     setLatencySamples (0);
@@ -63,8 +65,17 @@ void LabdProcessor::runEngine (juce::AudioBuffer<float>& buffer, bool forceBypas
     for (int c = outCh; c < buffer.getNumChannels(); ++c)
         buffer.clear (c, 0, n);
 
+    // Reinicio explícito del host, aplicado antes de grabar la entrada nueva.
+    // Si el host venía procesando sin pausa, la cola anterior se funde en 10 ms;
+    // tras una pausa (stop, setProcessing(false), inicio de un bounce) es un
+    // reinicio completo y la cola anterior no vuelve a sonar.
+    const double blockStartMs = juce::Time::getMillisecondCounterHiRes();
     if (resetRequested.exchange (false))
-        engine.beginSoftReset();
+    {
+        const double gap = blockStartMs - lastBlockEndMs;
+        const bool continuous = lastBlockEndMs > 0.0 && gap < juce::jmax (10.0, 4.0 * lastBlockDurationMs);
+        engine.hostReset (continuous);
+    }
 
     auto params = refs.read();
     if (forceBypass)
@@ -97,6 +108,8 @@ void LabdProcessor::runEngine (juce::AudioBuffer<float>& buffer, bool forceBypas
     }
 
     engine.process (buffer.getArrayOfWritePointers(), outCh, n, t);
+    lastBlockEndMs = juce::Time::getMillisecondCounterHiRes();
+    lastBlockDurationMs = 1000.0 * n / juce::jmax (1.0, currentSampleRate);
     telemetry.inputChannels.store (inCh, std::memory_order_relaxed);
     telemetry.outputChannels.store (outCh, std::memory_order_relaxed);
     publishTelemetry();
@@ -141,17 +154,25 @@ void LabdProcessor::publishTelemetry() noexcept
     telemetry.duckGainDb.store (tl.duckGainDb, r);
     telemetry.effectiveMix.store (tl.effectiveMix, r);
     telemetry.blocksProcessed.fetch_add (1, r);
+}
 
-    // Cola: tiempo mayor x repeticiones hasta -60 dB (máximo 60 s).
-    const double fb = juce::jlimit (0.0, 0.98, (double) refs.feedback->load (r) * 0.01);
-    const double longest = juce::jmax (tl.effectiveTimeMs[0], tl.effectiveTimeMs[1]) / 1000.0;
+double LabdProcessor::tailSecondsFor (const EngineParams& p, double bpm)
+{
+    // Tiempo mayor x repeticiones hasta -60 dB, con margen para la saturación y
+    // las transiciones; acotado a 60 s.
+    double msL = 0.0, msR = 0.0;
+    DelayEngine::effectiveTimesMs (p, bpm, msL, msR);
+    const double longest = juce::jmax (msL, msR) / 1000.0;
+    const double fb = juce::jlimit (0.0, 0.98, (double) p.feedback);
     const double repeats = fb > 1.0e-3 ? std::ceil (std::log (1.0e-3) / std::log (fb)) : 1.0;
-    tailSeconds.store ((float) juce::jmin (60.0, longest * (repeats + 1.0)), r);
+    return juce::jlimit (0.1, 60.0, longest * (repeats + 1.0) + 0.1);
 }
 
 double LabdProcessor::getTailLengthSeconds() const
 {
-    return (double) tailSeconds.load();
+    // Se calcula al pedirla (también antes del primer bloque, tras cargar un estado).
+    const double bpm = juce::jlimit (tempo::kMinBpm, tempo::kMaxBpm, (double) telemetry.bpm.load());
+    return tailSecondsFor (refs.read(), bpm);
 }
 
 juce::AudioProcessorParameter* LabdProcessor::getBypassParameter() const
@@ -187,7 +208,7 @@ void LabdProcessor::setStateInformation (const void* data, int sizeInBytes)
             auto tree = juce::ValueTree::fromXml (*xml);
             setSelectedBand ((int) tree.getProperty (kSelectedBandId, 2));
             apvts.replaceState (tree);
-            undoManager.clearUndoHistory();
+            editHistory.requestClear(); // el UndoManager solo se toca en el hilo de mensajes
         }
     }
 }

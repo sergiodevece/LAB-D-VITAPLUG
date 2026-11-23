@@ -184,9 +184,12 @@ void LfoDisplay::mouseDoubleClick (const juce::MouseEvent& e)
         return;
     if (auto* p = proc.getState().getParameter (ids::pan))
     {
-        p->beginChangeGesture();
+        const bool inGesture = draggingPan; // el segundo clic ya abrió el gesto
+        if (! inGesture)
+            p->beginChangeGesture();
         p->setValueNotifyingHost (p->convertTo0to1 (0.0f));
-        p->endChangeGesture();
+        if (! inGesture)
+            p->endChangeGesture();
     }
 }
 

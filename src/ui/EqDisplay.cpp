@@ -82,11 +82,22 @@ void EqDisplay::refresh()
     }
 
     // Repinta solo si algo cambió (o mientras el LFO modula).
-    juce::int64 h = (juce::int64) selected * 31 + (eqOn ? 7 : 0) + (bypassed ? 13 : 0) + (juce::int64) sampleRate;
+    // Huella de lo visible (aritmética sin signo: el desbordamiento está definido).
+    auto mixIn = [] (juce::uint64 h, double v) { return (h ^ (juce::uint64) std::llround (v * 1000.0)) * 1099511628211ull; };
+    juce::uint64 h = 1469598103934665603ull;
+    h = mixIn (h, selected);
+    h = mixIn (h, eqOn ? 1 : 0);
+    h = mixIn (h, bypassed ? 1 : 0);
+    h = mixIn (h, sampleRate);
     for (const auto& bv : bands)
-        h = h * 1000003 + (juce::int64) std::llround (bv.freq * 100.0) * 7 + (juce::int64) std::llround (bv.gain * 1000.0) * 11
-            + (juce::int64) std::llround (bv.q * 1000.0) * 13 + (bv.on ? 17 : 0) + (juce::int64) bv.type * 19
-            + (juce::int64) std::llround (bv.depth * 1000.0f) * 23;
+    {
+        h = mixIn (h, bv.freq);
+        h = mixIn (h, bv.gain);
+        h = mixIn (h, bv.q);
+        h = mixIn (h, bv.on ? 1 : 0);
+        h = mixIn (h, (double) (int) bv.type);
+        h = mixIn (h, bv.depth);
+    }
     if (modulating || h != lastHash)
     {
         lastHash = h;
@@ -280,15 +291,19 @@ void EqDisplay::mouseUp (const juce::MouseEvent&)
 
 void EqDisplay::mouseDoubleClick (const juce::MouseEvent& e)
 {
-    // Doble clic sobre un nodo: GAIN a 0 dB (bandas con ganancia).
+    // Doble clic sobre un nodo: GAIN a 0 dB (bandas con ganancia). Si el segundo
+    // clic ya abrió el gesto de ese nodo (mouseDown), se usa ese mismo gesto.
     for (int b = 0; b < kNumEqBands; ++b)
         if (nodePosition (b).getDistanceFrom (e.position) < 30.0f && ids::bandHasGain (b) && ! isCut (bands[(size_t) b].type))
         {
             if (auto* p = proc.getState().getParameter (ids::eqGainId (b)))
             {
-                p->beginChangeGesture();
+                const bool inGesture = dragging == b;
+                if (! inGesture)
+                    p->beginChangeGesture();
                 p->setValueNotifyingHost (p->convertTo0to1 (0.0f));
-                p->endChangeGesture();
+                if (! inGesture)
+                    p->endChangeGesture();
             }
         }
 }

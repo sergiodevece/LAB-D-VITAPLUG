@@ -79,6 +79,57 @@ TEST_CASE ("mix.bypass_transition_smooth")
     EVIDENCE ("BYPASS/WET ONLY cada 200/300 ms: peor salto %.4f, tono limpio del mismo pico %.4f", worst, natural);
 }
 
+TEST_CASE ("mix.bypass_stops_recording_and_clears")
+{
+    // BYPASS (también el del host): el seco sale exacto, lo que entra durante el
+    // bypass no se graba y la cola anterior se vacía; al salir, el delay arranca
+    // limpio. Mismo comportamiento en AU y VST3.
+    auto p = cleanWetParams();
+    p.wetOnly = false;
+    p.mix = 0.5f;
+    p.feedback = 0.5f;
+    p.timeMsL = p.timeMsR = 100.0; // 4800
+    const double fs = 48000.0;
+    Stereo in ((size_t) fs);
+    in.L[0] = in.R[0] = 1.0f;       // antes del bypass
+    in.L[9600] = in.R[9600] = 1.0f; // durante el bypass
+    RenderSpec spec;
+    spec.block = 64;
+    spec.hook = [] (DelayEngine&, EngineParams& q, TransportInfo&, size_t pos) { q.bypass = pos >= 7200 && pos < 14400; };
+    const auto out = render (p, in, spec);
+    // Durante el bypass completo: seco exacto.
+    size_t diff = 0;
+    for (size_t i = 8200; i < 14400; ++i)
+        diff += out.L[i] != in.L[i];
+    CHECK (diff == 0);
+    // Tras salir: ni la cola previa (eco en 14400 = 3 x 4800) ni el impulso del bypass (14400, 19200...).
+    const float after = maxAbs (out.L, 14400 + 960, out.size());
+    CHECK (after == 0.0f);
+    EVIDENCE ("BYPASS de 150 a 300 ms: %zu diferencias con el seco; después, máximo del wet %.3f (sin ecos del bypass ni de la cola previa)",
+              diff, after);
+}
+
+TEST_CASE ("mix.pan_law_correlated_echo")
+{
+    // Ley de PAN fijada: un eco solo en un canal conserva la potencia; un eco
+    // idéntico en L y R (fuente mono en STEREO con tiempos iguales) suma potencia
+    // al desplazarse: +3,01 dB en el extremo (documentado en docs/DSP.md).
+    auto p = cleanWetParams();
+    p.timeMsL = p.timeMsR = 50.0;
+    double powCentre = 0.0, powSide = 0.0, powHalf = 0.0;
+    for (float pan : { 0.0f, 1.0f, 0.5f })
+    {
+        p.pan = pan;
+        const auto out = render (p, impulse (4000, 0.5f, 0.5f));
+        const double pw = (double) out.L[2400] * out.L[2400] + (double) out.R[2400] * out.R[2400];
+        (pan == 0.0f ? powCentre : pan == 1.0f ? powSide : powHalf) = pw;
+    }
+    CHECK_NEAR (db (std::sqrt (powSide / powCentre)), 3.0103, 0.01);
+    CHECK_NEAR (db (std::sqrt (powHalf / powCentre)), 2.3226, 0.01);
+    EVIDENCE ("eco correlado (L = R): PAN +0,5 → %+.2f dB, PAN +1 → %+.2f dB de potencia respecto al centro",
+              db (std::sqrt (powHalf / powCentre)), db (std::sqrt (powSide / powCentre)));
+}
+
 TEST_CASE ("mix.drive_and_tape_character")
 {
     // Entrada definida: seno 1 kHz a -6 dBFS (0,5), FEEDBACK 0, 100 % wet, 10 ms.
@@ -203,11 +254,16 @@ TEST_CASE ("dyn.duck_reduces_and_recovers")
     CHECK_NEAR (tail, 0.0, 0.05);
     EVIDENCE ("DUCK 100 %%: wet %.1f dB durante la fuente, %.2f dB en el hueco (+0,6-1,4 s), cola %.3f dB", during, gap, tail);
 
-    // DUCK a cero es neutro (bit a bit).
-    const auto c = render (p, in);
+    // DUCK a cero es neutro: con una fuente fuerte, FB 0 y 100 % wet, la salida es
+    // la entrada retardada bit a bit (cualquier atenuación la cambiaría).
+    auto neutral = cleanWetParams();
+    neutral.timeMsL = neutral.timeMsR = 10.0;
+    neutral.duck = 0.0f;
+    const auto loud = noise (24000, 0.9f);
+    const auto c = render (neutral, loud);
     size_t diff = 0;
-    for (size_t i = 0; i < n; ++i)
-        diff += a.L[i] != c.L[i];
+    for (size_t i = 480; i < loud.size(); ++i)
+        diff += c.L[i] != loud.L[i - 480];
     CHECK (diff == 0);
     // DUCK 50 %: atenuación intermedia.
     ducked.duck = 0.5f;

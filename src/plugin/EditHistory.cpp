@@ -41,13 +41,23 @@ void EditHistory::parameterGestureChanged (int index, bool starting)
 
 void EditHistory::beginGroup()
 {
-    ++groupDepth;
+    groupDepth = 1;
 }
 
 void EditHistory::endGroup()
 {
-    groupDepth = juce::jmax (0, groupDepth - 1);
+    groupDepth = 0;
     commitIfIdle();
+}
+
+void EditHistory::service()
+{
+    if (clearPending.exchange (false))
+    {
+        undo.clearUndoHistory();
+        pending.clear();
+        lastAction = nullptr;
+    }
 }
 
 void EditHistory::closeAllGroups()
@@ -59,6 +69,7 @@ void EditHistory::closeAllGroups()
 
 void EditHistory::commitIfIdle()
 {
+    service();
     if (groupDepth > 0 || openGestures > 0 || pending.empty())
         return;
     std::vector<Change> changes;
@@ -71,14 +82,38 @@ void EditHistory::commitIfIdle()
     pending.clear();
     if (changes.empty())
         return;
+
+    // Ediciones seguidas del mismo parámetro (p. ej. la rueda del ratón, que abre
+    // un gesto por paso) se reúnen en un solo paso de undo.
+    const double now = juce::Time::getMillisecondCounterHiRes();
+    if (lastAction != nullptr && now - lastCommitMs < kCoalesceMs && lastAction->sameSingleParameter (changes))
+    {
+        lastAction->mergeAfter (changes);
+        lastCommitMs = now;
+        return;
+    }
     undo.beginNewTransaction();
-    undo.perform (new Action (*this, std::move (changes)));
+    auto* action = new Action (*this, std::move (changes));
+    undo.perform (action);
     undo.beginNewTransaction();
+    lastAction = action;
+    lastCommitMs = now;
+}
+
+bool EditHistory::Action::sameSingleParameter (const std::vector<Change>& other) const
+{
+    return changes.size() == 1 && other.size() == 1 && changes[0].param == other[0].param;
+}
+
+void EditHistory::Action::mergeAfter (const std::vector<Change>& other)
+{
+    changes[0].after = other[0].after;
 }
 
 void EditHistory::Action::apply (bool after)
 {
     const juce::ScopedValueSetter<bool> guard (history.applying, true);
+    history.lastAction = nullptr; // tras un undo/redo no se agrupa con la acción anterior
     for (const auto& c : changes)
     {
         c.param->beginChangeGesture();

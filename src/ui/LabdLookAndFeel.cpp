@@ -218,7 +218,13 @@ void Knob::resetToDefault()
 {
     if (! isEnabled())
         return;
-    // Gesto completo para el host (touch/latch) y el historial de undo.
+    // Gesto completo para el host (touch/latch) y el historial de undo. Si el
+    // doble clic llega con el botón pulsado, el gesto del arrastre ya está abierto.
+    if (isMouseButtonDown())
+    {
+        setValue (defaultValue, juce::sendNotificationSync);
+        return;
+    }
     const ScopedDragNotification gesture (*this);
     setValue (defaultValue, juce::sendNotificationSync);
 }

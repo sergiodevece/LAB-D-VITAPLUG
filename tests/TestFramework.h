@@ -41,7 +41,9 @@ inline void fail (const char* file, int line, const std::string& msg)
     std::printf ("    FAIL %s:%d: %s\n", file, line, msg.c_str());
 }
 
+#if defined(__GNUC__) || defined(__clang__)
 inline void evidence (const char* fmt, ...) __attribute__ ((format (printf, 1, 2)));
+#endif
 inline void evidence (const char* fmt, ...)
 {
     std::printf ("    · ");
