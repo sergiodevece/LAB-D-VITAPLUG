@@ -86,6 +86,7 @@ private:
     UiTelemetry telemetry;
     EditHistory editHistory { *this, undoManager }; // undo solo de gestos del editor
     std::atomic<bool> resetRequested { false };
+    std::atomic<int> selectedBand { 2 }; // estado del editor; se guarda con la sesión
     std::atomic<float> tailSeconds { 2.0f };
     double currentSampleRate = 48000.0;
 

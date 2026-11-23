@@ -17,7 +17,6 @@ LabdProcessor::LabdProcessor()
       refs (apvts)
 {
     apvts.state.setProperty (kStateVersionId, kStateVersion, nullptr);
-    apvts.state.setProperty (kSelectedBandId, 2, nullptr);
 }
 
 bool LabdProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
@@ -162,18 +161,19 @@ juce::AudioProcessorParameter* LabdProcessor::getBypassParameter() const
 
 int LabdProcessor::getSelectedBand() const
 {
-    return juce::jlimit (0, kNumEqBands - 1, (int) apvts.state.getProperty (kSelectedBandId, 2));
+    return selectedBand.load();
 }
 
 void LabdProcessor::setSelectedBand (int band)
 {
-    apvts.state.setProperty (kSelectedBandId, juce::jlimit (0, kNumEqBands - 1, band), nullptr);
+    selectedBand.store (juce::jlimit (0, kNumEqBands - 1, band));
 }
 
 void LabdProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
     auto state = apvts.copyState();
     state.setProperty (kStateVersionId, kStateVersion, nullptr);
+    state.setProperty (kSelectedBandId, selectedBand.load(), nullptr);
     if (auto xml = state.createXml())
         copyXmlToBinary (*xml, destData);
 }
@@ -185,8 +185,7 @@ void LabdProcessor::setStateInformation (const void* data, int sizeInBytes)
         if (xml->hasTagName (apvts.state.getType()))
         {
             auto tree = juce::ValueTree::fromXml (*xml);
-            if (! tree.hasProperty (kSelectedBandId))
-                tree.setProperty (kSelectedBandId, 2, nullptr);
+            setSelectedBand ((int) tree.getProperty (kSelectedBandId, 2));
             apvts.replaceState (tree);
             undoManager.clearUndoHistory();
         }
