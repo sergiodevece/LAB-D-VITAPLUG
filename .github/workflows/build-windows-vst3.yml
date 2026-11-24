@@ -1,0 +1,101 @@
+name: LAB-D Windows x64
+
+on:
+  push:
+    branches: [ci/windows-vst3]
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    name: VST3 Release, CTest y pluginval
+    runs-on: windows-2022
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Configurar JUCE y Visual Studio
+        shell: pwsh
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          git clone --depth 1 --branch 9.0.3 https://github.com/juce-framework/JUCE.git external/JUCE
+          $juceCommit = git -C external/JUCE rev-parse HEAD
+          if ($juceCommit -ne 'be29c81492b6151c8ea8d14c840e1311963b3a83') {
+            throw "Revisión inesperada de JUCE: $juceCommit"
+          }
+          cmake -S . -B build-win -G "Visual Studio 17 2022" -A x64
+
+      - name: Compilar VST3 y pasar CTest
+        shell: pwsh
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          cmake --build build-win --config Release --target LABD_VST3 labd_engine_tests labd_plugin_tests --parallel 2
+          ctest --test-dir build-win -C Release --output-on-failure --no-tests=error
+
+      - name: Empaquetar y comprobar el binario x64
+        shell: pwsh
+        run: |
+          $bundle = Get-Item 'build-win/LABD_artefacts/Release/VST3/LAB-D.vst3'
+          $binaryPath = 'LAB-D.vst3/Contents/x86_64-win/LAB-D.vst3'
+          $binary = Join-Path $bundle.Parent.FullName $binaryPath
+          $bytes = [IO.File]::ReadAllBytes($binary)
+          $peOffset = [BitConverter]::ToInt32($bytes, 0x3c)
+          $signature = [BitConverter]::ToUInt32($bytes, $peOffset)
+          $machine = [BitConverter]::ToUInt16($bytes, $peOffset + 4)
+          if ($signature -ne 0x4550 -or $machine -ne 0x8664) {
+            throw 'El binario debe ser un PE de Windows x64.'
+          }
+
+          $stage = New-Item -ItemType Directory (Join-Path $env:RUNNER_TEMP 'labd-package')
+          Copy-Item -LiteralPath $bundle.FullName -Destination $stage.FullName -Recurse
+          $checksum = (Get-FileHash -Algorithm SHA256 -LiteralPath $binary).Hash.ToLowerInvariant()
+          @(
+            "# LAB-D 0.1.0 - Windows x64 - commit $env:GITHUB_SHA"
+            "$checksum  $binaryPath"
+          ) | Set-Content -Encoding ascii (Join-Path $stage.FullName 'SHA256SUMS.txt')
+
+          $archive = Join-Path $env:RUNNER_TEMP 'LAB-D-0.1.0-Windows-x64-VST3.zip'
+          $extracted = Join-Path $env:RUNNER_TEMP 'labd-extracted'
+          Compress-Archive -Path (Join-Path $stage.FullName '*') -DestinationPath $archive
+          Expand-Archive -LiteralPath $archive -DestinationPath $extracted
+          $extractedHash = (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $extracted $binaryPath)).Hash
+          if ($extractedHash -ne $checksum) {
+            throw 'El SHA-256 del binario extraído debe coincidir con el compilado.'
+          }
+          Get-FileHash -Algorithm SHA256 -LiteralPath $archive
+
+      - name: Validar el VST3 extraído con pluginval nivel 10
+        shell: pwsh
+        timeout-minutes: 10
+        run: |
+          $tools = New-Item -ItemType Directory (Join-Path $env:RUNNER_TEMP 'pluginval')
+          $pluginvalZip = Join-Path $tools.FullName 'pluginval_Windows.zip'
+          Invoke-WebRequest -Uri 'https://github.com/Tracktion/pluginval/releases/download/v1.0.4/pluginval_Windows.zip' -OutFile $pluginvalZip
+          $expectedHash = 'c08e61ce3b96db41636f8ec7e76f4c7e2c13ebdac7fa1b5a1f52b4f32ec715ab'
+          if ((Get-FileHash -Algorithm SHA256 -LiteralPath $pluginvalZip).Hash -ne $expectedHash) {
+            throw 'El ZIP de pluginval v1.0.4 debe coincidir con el SHA-256 esperado.'
+          }
+          Expand-Archive -LiteralPath $pluginvalZip -DestinationPath $tools.FullName
+          $bundle = Join-Path $env:RUNNER_TEMP 'labd-extracted/LAB-D.vst3'
+          $stdout = Join-Path $tools.FullName 'stdout.txt'
+          $stderr = Join-Path $tools.FullName 'stderr.txt'
+          $arguments = @('--strictness-level', '10', '--random-seed', '314159',
+                         '--timeout-ms', '120000', '--validate', ('"{0}"' -f $bundle))
+          $validation = Start-Process -FilePath (Join-Path $tools.FullName 'pluginval.exe') `
+              -ArgumentList $arguments -Wait -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+          Get-Content -LiteralPath $stdout, $stderr
+          if ($validation.ExitCode -ne 0 -or -not (Select-String -LiteralPath $stdout -Pattern 'SUCCESS' -Quiet)) {
+            throw "pluginval no confirmó el éxito. Código de salida: $($validation.ExitCode)"
+          }
+
+      - name: Subir ZIP para smoke
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          path: ${{ runner.temp }}/LAB-D-0.1.0-Windows-x64-VST3.zip
+          archive: false
+          retention-days: 30
+          if-no-files-found: error
